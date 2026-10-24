@@ -4460,6 +4460,8 @@ def tdee_targets(
         console.print(f"  [cyan]{recommendation.recommendation_text}[/cyan]")
         if recommendation.reason_codes:
             console.print(f"  [dim]Reasons: {', '.join(recommendation.reason_codes)}[/dim]")
+        for warning in analysis.warnings:
+            console.print(f"  [yellow]{warning}[/yellow]")
 
 
 @tdee_app.command("progress")
@@ -4577,6 +4579,8 @@ def tdee_progress(
         console.print()
         console.print(f"[bold]Assessment:[/bold] {analysis.recommendation.assessment}")
         console.print(f"  {analysis.recommendation.recommendation_text}")
+        for warning in analysis.warnings:
+            console.print(f"  [yellow]{warning}[/yellow]")
         if analysis.recommendation.target_kcal_per_day is not None:
             console.print(f"  Target: {analysis.recommendation.target_kcal_per_day} kcal/day")
 

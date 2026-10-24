@@ -670,6 +670,7 @@ def _add_coverage_gate_hint(
         warnings.append(
             f"Intake coverage is {intake.weighted_coverage:.0%}, just under the "
             f"{policy.MIN_INTAKE_COVERAGE:.0%} gate. Logging about "
-            f"{max(1, needed_days)} more day(s) in this window would open it, so a "
-            "verdict this close to the gate is not stable."
+            f"{max(1, needed_days)} more day(s) in this window would satisfy the "
+            "coverage gate (the other evidence gates still apply), so a verdict this "
+            "close to the gate is not stable."
         )
