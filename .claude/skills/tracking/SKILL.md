@@ -50,6 +50,14 @@ Never treat it as consumed food. Actual intake must be logged with
 `llmn intake log`. Missing days are unknown, not zero. Partial days are excluded
 from the measured mean, and estimated days are down-weighted.
 
+**Evidence and confidence:** a learned estimate needs valid 7-day segments
+(3+ weigh-ins, 6-day span, half the days logged) with per-segment noise derived
+from the slope standard error. Report `confidence` (`none`/`low`/`moderate`/
+`high`) and `segments_used`. With one segment, or coverage just under the gate,
+the tool holds rather than guessing. A target created from a rate correction is
+labelled `target_basis: rate_correction`; the TDEE-based
+`expenditure_target_kcal` is a cross-check, not the target.
+
 **Recommendation states:** `on_track`, `intake_above_goal`,
 `intake_below_goal`, `insufficient_data`, `target_reached`, and `no_goal`.
 An insufficient-evidence result is a successful analysis with

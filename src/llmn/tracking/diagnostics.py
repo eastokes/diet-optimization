@@ -58,6 +58,7 @@ class TDEEReport:
     adjusted_tdee: float | None
     uncertainty_95ci: float | None
     segments_used: int
+    confidence: str
     calculation_weight_lbs: float
     activity_level: str
     avg_actual_calories: float | None
@@ -83,6 +84,9 @@ class ProgressReport:
     remaining_lbs: float | None
     weeks_to_goal: float | None
     notes: list[str]
+    target_kcal_per_day: int | None = None
+    expenditure_target_kcal: int | None = None
+    target_basis: str | None = None
     latest_composition: BodyComposition | None = None
     body_comp_delta: BodyCompDelta | None = None
 
@@ -173,6 +177,7 @@ def build_tdee_report(analysis: TrackingAnalysis) -> TDEEReport:
         adjusted_tdee=estimate.kcal_per_day,
         uncertainty_95ci=estimate.uncertainty_95ci,
         segments_used=estimate.segments_used,
+        confidence=estimate.confidence,
         calculation_weight_lbs=estimate.calculation_weight_lbs,
         activity_level=estimate.activity_level,
         avg_actual_calories=mean_intake,
@@ -259,6 +264,9 @@ def build_progress_report(
         remaining_lbs=remaining_lbs,
         weeks_to_goal=weeks_to_goal,
         notes=notes,
+        target_kcal_per_day=analysis.recommendation.target_kcal_per_day,
+        expenditure_target_kcal=analysis.recommendation.expenditure_target_kcal,
+        target_basis=analysis.recommendation.target_basis,
         latest_composition=latest_composition,
         body_comp_delta=body_comp_delta,
     )
@@ -364,7 +372,9 @@ def format_tdee_report(report: TDEEReport) -> str:
             f" ± {report.uncertainty_95ci:.0f}" if report.uncertainty_95ci is not None else ""
         )
         lines.append(f"Estimated TDEE:  {report.adjusted_tdee:.0f}{uncertainty} kcal/day (95%)")
-    lines.append(f"Segments used:   {report.segments_used} weekly segment(s)")
+    lines.append(
+        f"Segments used:   {report.segments_used} weekly segment(s); confidence {report.confidence}"
+    )
 
     lines.append("")
     lines.append("Actual intake (same window)")
@@ -444,6 +454,16 @@ def format_progress_report(report: ProgressReport) -> str:
         if report.remaining_lbs is not None:
             side = "above" if report.remaining_lbs > 0 else "below"
             parts.append(f"  Remaining to target: {abs(report.remaining_lbs):.1f} lbs {side}")
+        if report.target_kcal_per_day is not None:
+            parts.append(
+                f"  Recommended intake: {report.target_kcal_per_day} kcal/day "
+                f"({report.target_basis or 'unspecified basis'})"
+            )
+        if report.expenditure_target_kcal is not None:
+            parts.append(
+                f"  Energy-balance cross-check: {report.expenditure_target_kcal} kcal/day "
+                "(estimated TDEE + goal rate)"
+            )
         if report.weeks_to_goal is not None:
             parts.append(f"  At the measured rate: ~{report.weeks_to_goal:.0f} weeks")
         elif report.goal_weight is not None:

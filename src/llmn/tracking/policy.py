@@ -18,8 +18,31 @@ STALE_CURRENT_WEIGHT_DAYS = 14
 MIN_WEIGHT_OBSERVATIONS = 3
 MIN_COMPLETE_INTAKE_DAYS = 7
 MIN_INTAKE_COVERAGE = 0.4
-MIN_SEGMENT_WEIGHT_SPAN_DAYS = 4
+# Segments are 7-day blocks, so the largest observable span inside one block is
+# 6 days. Requiring a shorter span (previously 4) let a handful of noisy
+# weigh-ins masquerade as a precise energy-balance observation.
+SEGMENT_LENGTH_DAYS = 7
+MIN_SEGMENT_WEIGHT_SPAN_DAYS = 6
+MIN_SEGMENT_WEIGHT_OBSERVATIONS = 3
 MIN_SEGMENT_INTAKE_COVERAGE = 0.5
+MIN_SEGMENTS_FOR_RECOMMENDATION = 2
+# Below this many valid segments the learned level is still partly anchored to
+# the baseline (Mifflin x activity); the rate-based target is unaffected.
+MIN_SEGMENTS_FOR_STABLE_LEVEL = 6
+
+# Assumed day-to-day weight noise (water, glycogen, gut contents) used to derive
+# the standard error of a segment slope. The estimator must not treat a 4-day
+# slope as a precise measurement of energy balance.
+WEIGHT_NOISE_LBS = 0.7
+
+# Baseline prior uncertainty for the learned bias. Mifflin x activity is not
+# known to +/-100 kcal/day, so a tighter prior made the filter ignore data.
+BASELINE_PRIOR_STD_KCAL = 250.0
+MEASURED_BASELINE_PRIOR_STD_KCAL = 150.0
+
+# Warn when intake coverage sits just under the gate so a verdict flip on one
+# extra logged day is visible.
+NEAR_GATE_MARGIN = 0.05
 
 # Formula-only fallback uncertainty (kcal/day standard deviation).
 FORMULA_UNCERTAINTY_KCAL = 250.0

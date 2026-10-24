@@ -94,26 +94,57 @@ An adaptive estimate requires all of the following:
 - A latest weight no older than 14 days.
 - At least 7 complete actual-intake days.
 - Weighted intake coverage of at least 0.4.
-- At least one valid 7-day segment with 2 weight observations, a 4-day span, and
-  0.5 segment intake coverage.
+- At least one valid 7-day segment with 3 weight observations, a 6-day span,
+  and 0.5 segment intake coverage.
 
-If a gate fails, the estimate is `formula_only`: it exposes the Mifflin-St Jeor
-starting point with ±490 kcal/day (95%) and the reason codes, but the
-recommendation does not pretend the value was learned.
+Requirements were previously weaker (2 weigh-ins, 4-day span). A two-point
+four-day slope is mostly water and glycogen movement, not energy balance, so it
+could move the learned level by hundreds of kcal/day. A window just under the
+coverage gate now also emits `NEAR_COVERAGE_GATE` with the number of days that
+would open it, so a verdict that flips on one extra log is visible.
+
+If a gate fails, the estimate is `formula_only`: it exposes the baseline
+starting point with ±490 kcal/day (95%; ±392 with a measured RMR) and the reason
+codes, but the recommendation does not pretend the value was learned.
 
 ## Expenditure estimation
 
 The 28-day window is divided into consecutive 7-calendar-day segments. For each
 segment:
 
-1. Compute the raw-weight slope over that segment.
-2. Convert it to an implied deficit: `-slope_lbs_per_day * 3500`.
-3. Compute the expected deficit from the segment's baseline Mifflin TDEE minus
-   the coverage-weighted actual intake.
-4. Update a scalar Kalman filter with `days_elapsed` and segment coverage.
+1. Compute the raw-weight slope over that segment and its standard error, using
+   an assumed 0.7 lb day-to-day weight noise (`WEIGHT_NOISE_LBS`).
+2. Convert the slope to an implied deficit: `-slope_lbs_per_day * 3500`.
+3. Convert the slope standard error to an observation-noise variance
+   `(se_lbs_per_day * 3500)^2`, so a short or scattered segment counts for
+   little instead of being treated as a precise measurement.
+4. Compute the expected deficit from the segment's baseline TDEE minus the
+   coverage-weighted actual intake.
+5. Update a scalar Kalman filter with `days_elapsed`, segment coverage, and that
+   per-observation noise.
 
-The learned adjustment is the filter's bias added to the current Mifflin
-baseline. Activity changes inside the window widen variance by `150^2`.
+The filter's prior variance reflects baseline uncertainty, not false precision:
+`250^2` with a Mifflin baseline and `150^2` with a measured RMR. A prior of
+`100^2` previously made the filter ignore segments and report a level that
+tracked the activity label.
+
+The learned adjustment is the filter's bias added to the current baseline.
+Activity changes inside the window widen variance by `150^2`.
+
+Confidence is reported explicitly:
+
+| Confidence | Condition |
+| --- | --- |
+| `none` | formula-only estimate |
+| `low` | 1 valid segment; intake changes are held |
+| `moderate` | 2-5 valid segments; level still partly prior-anchored |
+| `high` | 6 or more valid segments |
+
+Below 6 segments the estimate carries `PRIOR_DEPENDENT_LEVEL`: the level remains
+partly anchored to Mifflin x activity (changing the activity label still moves
+it), while the rate-based target does not. With only one valid segment the
+recommendation is `insufficient_data` / `hold` rather than a change.
+
 Uncertainty is reported as a 95% interval derived from filter variance; it is
 not a validated clinical confidence interval and does not include food-logging
 bias, water-weight shifts, or model misspecification.
@@ -130,6 +161,16 @@ bias, water-weight shifts, or model misspecification.
 | Calorie floor | 1500 male / 1200 female | Safety guardrail, not a prescription |
 | Loss rate range | -2.0 to -0.25 lb/week | Supported product range |
 | Gain rate range | 0.25 to 1.0 lb/week | Supported product range |
+| Minimum segments for a change | 2 | One segment is not enough evidence |
+| Segments for a stable level | 6 | Below this, level stays prior-anchored |
+
+Target basis is explicit. A change recommendation corrects the measured mean
+intake by the observed-vs-goal rate gap (`target_basis: rate_correction`); an
+on-track verdict keeps the measured mean (`measured_mean_intake`); a
+no-observation start uses the formula baseline (`formula_only`). When an
+expenditure estimate exists, `expenditure_target_kcal` (estimated TDEE plus the
+goal rate) is reported as an energy-balance cross-check, not as the target,
+because the level is less certain than the measured rate gap.
 
 Assessment states describe progress relative to the requested goal, not proof
 of exact intake or metabolism:

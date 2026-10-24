@@ -159,6 +159,7 @@ class ExpenditureEstimate:
     calculation_weight_lbs: float
     calculation_weight_source: str
     activity_level: str
+    confidence: str = "none"  # none | low | moderate | high
     reason_codes: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     fingerprint: str = ""
@@ -177,6 +178,7 @@ class ExpenditureEstimate:
             "calculation_weight_lbs": round(self.calculation_weight_lbs, 1),
             "calculation_weight_source": self.calculation_weight_source,
             "activity_level": self.activity_level,
+            "confidence": self.confidence,
             "reason_codes": list(self.reason_codes),
         }
 
@@ -208,6 +210,28 @@ def weight_slope_lbs_per_day(entries: list[WeightEntry]) -> float | None:
         return None
     numerator = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
     return numerator / denominator
+
+
+def weight_slope_standard_error(
+    entries: list[WeightEntry],
+    sigma_lbs: float = policy.WEIGHT_NOISE_LBS,
+) -> float | None:
+    """Standard error of the least-squares slope, in lbs/day.
+
+    Day-to-day weight noise is dominated by water, glycogen, and gut contents,
+    not by fat change. A four-day two-point segment therefore carries a slope
+    uncertainty of hundreds of kcal/day, and the filter must not treat it as a
+    precise observation of energy balance.
+    """
+    if len(entries) < 2:
+        return None
+    first_date = entries[0].measured_at
+    xs = [float((entry.measured_at - first_date).days) for entry in entries]
+    mean_x = sum(xs) / len(xs)
+    sxx = sum((x - mean_x) ** 2 for x in xs)
+    if sxx <= 0:
+        return None
+    return sigma_lbs / math.sqrt(sxx)
 
 
 def summarize_intake(
@@ -386,6 +410,8 @@ def _formula_estimate(
         else policy.FORMULA_UNCERTAINTY_95CI
     )
 
+    _add_coverage_gate_hint(intake, reasons, warnings)
+
     return ExpenditureEstimate(
         method="formula_only",
         kcal_per_day=baseline.kcal_per_day,
@@ -403,6 +429,7 @@ def _formula_estimate(
         calculation_weight_lbs=calculation_weight,
         calculation_weight_source=weight_source,
         activity_level=activity_level,
+        confidence="none",
         reason_codes=reasons,
         warnings=warnings,
         fingerprint=_fingerprint(profile, window, weights, intake_entries, activities),
@@ -475,13 +502,20 @@ def estimate_expenditure(
     current_activity = _resolve_activity_level(activities, fallback_activity, as_of)
     baseline_current = baseline_expenditure(profile, calculate_weight, current_activity, as_of)
 
-    tdee_filter = TDEEFilter()
+    prior_std = (
+        policy.MEASURED_BASELINE_PRIOR_STD_KCAL
+        if baseline_current.source == "measured_rmr"
+        else policy.BASELINE_PRIOR_STD_KCAL
+    )
+    tdee_filter = TDEEFilter(variance=prior_std**2)
     segments_used = 0
     activity_levels: set[str] = set()
 
     segment_start = window.start
     while segment_start <= window.end:
-        segment_end = min(segment_start + timedelta(days=6), window.end)
+        segment_end = min(
+            segment_start + timedelta(days=policy.SEGMENT_LENGTH_DAYS - 1), window.end
+        )
         segment_weights = [
             entry for entry in weights.entries if segment_start <= entry.measured_at <= segment_end
         ]
@@ -490,7 +524,10 @@ def estimate_expenditure(
             first = segment_weights[0]
             last = segment_weights[-1]
             elapsed_days = (last.measured_at - first.measured_at).days
-            if elapsed_days >= policy.MIN_SEGMENT_WEIGHT_SPAN_DAYS:
+            if (
+                len(segment_weights) >= policy.MIN_SEGMENT_WEIGHT_OBSERVATIONS
+                and elapsed_days >= policy.MIN_SEGMENT_WEIGHT_SPAN_DAYS
+            ):
                 segment_intake = summarize_intake(
                     intake_entries,
                     AnalysisWindow(first.measured_at, last.measured_at),
@@ -510,14 +547,21 @@ def estimate_expenditure(
                     if segment_slope is None:
                         segment_start = segment_end + timedelta(days=1)
                         continue
+                    slope_se = weight_slope_standard_error(segment_weights)
+                    if slope_se is None:
+                        segment_start = segment_end + timedelta(days=1)
+                        continue
                     # Positive slope means gain; a deficit is the negative.
                     implied_deficit = -segment_slope * 3500.0
                     expected_deficit = segment_baseline - segment_intake.mean_kcal
+                    # Convert slope uncertainty into deficit uncertainty.
+                    obs_noise = (slope_se * 3500.0) ** 2
                     tdee_filter.predict_and_update(
                         implied_deficit=implied_deficit,
                         expected_deficit=expected_deficit,
                         days=elapsed_days,
                         calorie_coverage=segment_intake.weighted_coverage,
+                        obs_noise=obs_noise,
                     )
                     activity_levels.add(seg_activity)
                     segments_used += 1
@@ -526,6 +570,13 @@ def estimate_expenditure(
 
     if segments_used == 0:
         reasons.append("NO_VALID_SEGMENTS")
+        warnings.append(
+            "No 7-day segment met the evidence requirements (at least "
+            f"{policy.MIN_SEGMENT_WEIGHT_OBSERVATIONS} weigh-ins spanning "
+            f"{policy.MIN_SEGMENT_WEIGHT_SPAN_DAYS} days, with at least half the "
+            "days' actual intake logged). Weigh in and log intake most days for "
+            "two weeks, then re-run."
+        )
         return _formula_estimate(
             profile,
             weight_history,
@@ -558,6 +609,27 @@ def estimate_expenditure(
         )
 
     uncertainty = 1.96 * math.sqrt(variance)
+    if segments_used < policy.MIN_SEGMENTS_FOR_RECOMMENDATION:
+        confidence = "low"
+        reasons.append("SINGLE_SEGMENT_EVIDENCE")
+        warnings.append(
+            f"Only {segments_used} weekly segment(s) met the evidence requirements. "
+            "The estimate is shown for transparency, but an intake change needs at "
+            f"least {policy.MIN_SEGMENTS_FOR_RECOMMENDATION} valid segments."
+        )
+    else:
+        confidence = "high" if segments_used >= policy.MIN_SEGMENTS_FOR_STABLE_LEVEL else "moderate"
+        if segments_used < policy.MIN_SEGMENTS_FOR_STABLE_LEVEL:
+            reasons.append("PRIOR_DEPENDENT_LEVEL")
+            warnings.append(
+                f"With {segments_used} valid segment(s) the expenditure level is still "
+                "partly anchored to the baseline (Mifflin-St Jeor or measured RMR x "
+                "activity). Treat the level as provisional; the rate-based target does "
+                "not depend on it. Correcting the activity level or recording a "
+                "measured RMR narrows this gap."
+            )
+
+    _add_coverage_gate_hint(intake, reasons, warnings)
 
     return ExpenditureEstimate(
         method="learned",
@@ -576,7 +648,28 @@ def estimate_expenditure(
         calculation_weight_lbs=calculate_weight,
         calculation_weight_source="recent_trend",
         activity_level=current_activity,
+        confidence=confidence,
         reason_codes=reasons,
         warnings=warnings,
         fingerprint=_fingerprint(profile, window, weights, intake_entries, activities),
     )
+
+
+def _add_coverage_gate_hint(
+    intake: IntakeSummary,
+    reasons: list[str],
+    warnings: list[str],
+) -> None:
+    """Warn when the window is only just short of the coverage gate."""
+    shortfall = policy.MIN_INTAKE_COVERAGE - intake.weighted_coverage
+    if 0 < shortfall < policy.NEAR_GATE_MARGIN:
+        needed_days = math.ceil(
+            policy.MIN_INTAKE_COVERAGE * intake.window_days - intake.measured_equivalent_days
+        )
+        reasons.append("NEAR_COVERAGE_GATE")
+        warnings.append(
+            f"Intake coverage is {intake.weighted_coverage:.0%}, just under the "
+            f"{policy.MIN_INTAKE_COVERAGE:.0%} gate. Logging about "
+            f"{max(1, needed_days)} more day(s) in this window would open it, so a "
+            "verdict this close to the gate is not stable."
+        )

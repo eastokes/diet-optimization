@@ -11,9 +11,13 @@ from llmn.tracking import policy
 from llmn.tracking.diagnostics import calculate_mifflin_tdee
 from llmn.tracking.ema import update_trend
 from llmn.tracking.errors import GoalValidationError
-from llmn.tracking.estimation import AnalysisWindow, summarize_intake
+from llmn.tracking.estimation import (
+    AnalysisWindow,
+    summarize_intake,
+    weight_slope_standard_error,
+)
 from llmn.tracking.formula import BASELINE_MEASURED_RMR, baseline_expenditure
-from llmn.tracking.models import GoalPeriod, IntakeEntry, UserProfile
+from llmn.tracking.models import GoalPeriod, IntakeEntry, UserProfile, WeightEntry
 from llmn.tracking.queries import (
     GoalQueries,
     IntakeQueries,
@@ -549,3 +553,115 @@ class TestBirthdateAndMeasuredRMR:
                 activity_level="moderate",
                 resting_metabolic_rate=-10.0,
             )
+
+
+class TestTDEERobustness:
+    def test_slope_standard_error_reflects_span_and_observations(self) -> None:
+        def entries(days: list[int]) -> list[WeightEntry]:
+            return [
+                WeightEntry(
+                    log_id=None,
+                    user_id=1,
+                    weight_lbs=180.0,
+                    trend_lbs=180.0,
+                    measured_at=date(2026, 1, 1) + timedelta(days=offset),
+                )
+                for offset in days
+            ]
+
+        two_points_short = weight_slope_standard_error(entries([0, 4]))
+        three_points_long = weight_slope_standard_error(entries([0, 3, 6]))
+        seven_daily = weight_slope_standard_error(entries(list(range(7))))
+
+        assert two_points_short == pytest.approx(0.7 / (8**0.5))
+        assert three_points_long == pytest.approx(0.7 / (18**0.5))
+        assert seven_daily == pytest.approx(0.7 / (28**0.5))
+        assert two_points_short > three_points_long > seven_daily
+
+    def test_short_noisy_segment_does_not_produce_a_learned_estimate(
+        self, temp_db: DatabaseConnection
+    ) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            set_goal(conn, user_id, "loss", -0.5)
+            # Two weigh-ins three days apart plus an endpoint weigh-in: the old
+            # policy treated the two-point block as a valid segment and learned a
+            # large bias from it.
+            for offset, weight in ((0, 185.0), (3, 186.0), (14, 185.5)):
+                day = date(2026, 1, 1) + timedelta(days=offset)
+                WeightQueries.add_weight(conn, user_id, weight, day)
+            for offset in range(7):
+                IntakeQueries.upsert(
+                    conn,
+                    user_id,
+                    date(2026, 1, 1) + timedelta(days=offset),
+                    2000,
+                )
+            analysis = analyze(conn, user_id, date(2026, 1, 15), 15)
+
+        assert analysis.estimate.method == "formula_only"
+        assert "NO_VALID_SEGMENTS" in analysis.reason_codes
+        assert analysis.recommendation.action == "hold"
+
+    def test_single_valid_segment_is_low_confidence_and_holds(
+        self, temp_db: DatabaseConnection
+    ) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            set_goal(conn, user_id, "loss", -0.5)
+            for offset in range(7):
+                day = date(2026, 1, 1) + timedelta(days=offset)
+                WeightQueries.add_weight(conn, user_id, 185.0 - 0.05 * offset, day)
+                IntakeQueries.upsert(conn, user_id, day, 2000)
+            WeightQueries.add_weight(conn, user_id, 184.5, date(2026, 1, 15))
+            analysis = analyze(conn, user_id, date(2026, 1, 15), 15)
+
+        assert analysis.estimate.method == "learned"
+        assert analysis.estimate.segments_used == 1
+        assert analysis.estimate.confidence == "low"
+        assert "SINGLE_SEGMENT_EVIDENCE" in analysis.reason_codes
+        assert analysis.recommendation.action == "hold"
+        assert analysis.recommendation.assessment == "insufficient_data"
+        assert analysis.recommendation.target_kcal_per_day is None
+
+    def test_coverage_just_under_the_gate_is_flagged(self, temp_db: DatabaseConnection) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            set_goal(conn, user_id, "loss", -0.5)
+            for offset in range(7):
+                day = date(2026, 1, 1) + timedelta(days=offset)
+                WeightQueries.add_weight(conn, user_id, 185.0 - 0.05 * offset, day)
+                IntakeQueries.upsert(conn, user_id, day, 2000)
+            analysis = analyze(conn, user_id, date(2026, 1, 19), 19)
+
+        assert analysis.estimate.method == "formula_only"
+        assert "LOW_INTAKE_COVERAGE" in analysis.reason_codes
+        assert "NEAR_COVERAGE_GATE" in analysis.reason_codes
+        assert any("just under" in warning for warning in analysis.warnings)
+
+    def test_target_basis_and_energy_balance_cross_check(self, temp_db: DatabaseConnection) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            set_goal(conn, user_id, "loss", -1.0)
+            add_scenario(conn, user_id, expenditure=2500.0, intake=2000.0)
+            analysis = analyze(conn, user_id, date(2026, 1, 28), 28)
+
+        recommendation = analysis.recommendation
+        assert recommendation.assessment == "on_track"
+        assert recommendation.target_basis == "measured_mean_intake"
+        assert recommendation.expenditure_target_kcal == pytest.approx(
+            round(analysis.estimate.kcal_per_day - 500), abs=1
+        )
+
+    def test_change_recommendation_states_its_basis(self, temp_db: DatabaseConnection) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            set_goal(conn, user_id, "loss", -1.0)
+            add_scenario(conn, user_id, expenditure=2500.0, intake=2500.0)
+            analysis = analyze(conn, user_id, date(2026, 1, 28), 28)
+
+        recommendation = analysis.recommendation
+        assert recommendation.action == "decrease_intake"
+        assert recommendation.target_basis == "rate_correction"
+        assert recommendation.expenditure_target_kcal is not None
+        assert "rate gap" in recommendation.recommendation_text

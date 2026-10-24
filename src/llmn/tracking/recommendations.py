@@ -55,6 +55,12 @@ class Recommendation:
     goal_rate_lbs_per_week: float | None = None
     candidate_target_kcal_per_day: int | None = None
     evidence: dict[str, object] = field(default_factory=dict)
+    # How the target was derived. ``rate_correction`` adjusts the measured mean
+    # intake by the observed-vs-goal rate gap; it does not re-anchor on the
+    # expenditure estimate, whose level is less certain than the measured gap.
+    target_basis: str | None = None
+    # Energy-balance cross-check: estimated TDEE plus the goal rate.
+    expenditure_target_kcal: int | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -77,6 +83,9 @@ class Recommendation:
                 else None
             ),
             "goal_rate_lbs_per_week": self.goal_rate_lbs_per_week,
+            "target_basis": self.target_basis,
+            "expenditure_target_kcal": self.expenditure_target_kcal,
+            "confidence": self.evidence.get("confidence"),
             "evidence": self.evidence,
         }
 
@@ -206,6 +215,7 @@ def recommend(
 
     validate_goal(goal)
     protein_min, protein_max = _protein_range(weight_for_protein, goal.mode)
+    expenditure_target = _expenditure_target(estimate, goal)
 
     latest_weight_age = estimate.weights.latest_age_days
     if _target_reached(goal, current_trend) and (
@@ -265,6 +275,8 @@ def recommend(
                 goal_rate_lbs_per_week=goal.rate_lbs_per_week,
                 candidate_target_kcal_per_day=target,
                 evidence=_evidence(estimate),
+                target_basis="formula_only",
+                expenditure_target_kcal=expenditure_target,
             )
 
         return Recommendation(
@@ -284,6 +296,33 @@ def recommend(
             protein_max_g=protein_max,
             observed_rate_lbs_per_week=estimate.observed_rate_lbs_per_week,
             goal_rate_lbs_per_week=goal.rate_lbs_per_week,
+            evidence=_evidence(estimate),
+        )
+
+    if estimate.segments_used < policy.MIN_SEGMENTS_FOR_RECOMMENDATION:
+        uncertainty = estimate.uncertainty_95ci or 0.0
+        return Recommendation(
+            assessment="insufficient_data",
+            action="hold",
+            target_kcal_per_day=None,
+            change_kcal_per_day=None,
+            reason_codes=_dedupe(reasons + ["SINGLE_SEGMENT_EVIDENCE"]),
+            warnings=warnings,
+            recommendation_text=(
+                f"Only {estimate.segments_used} weekly segment(s) met the evidence "
+                "requirements, so the estimate "
+                f"({estimate.kcal_per_day:.0f} ± {uncertainty:.0f} kcal/day) is too "
+                f"weakly supported to change intake. At least "
+                f"{policy.MIN_SEGMENTS_FOR_RECOMMENDATION} valid segments are needed: "
+                "log intake daily and weigh in most days, then re-run. No target is "
+                "held against your current intake."
+            ),
+            next_review_date=as_of + timedelta(days=policy.REVIEW_CADENCE_DAYS),
+            protein_min_g=protein_min,
+            protein_max_g=protein_max,
+            observed_rate_lbs_per_week=estimate.observed_rate_lbs_per_week,
+            goal_rate_lbs_per_week=goal.rate_lbs_per_week,
+            expenditure_target_kcal=expenditure_target,
             evidence=_evidence(estimate),
         )
 
@@ -339,6 +378,8 @@ def recommend(
             goal_rate_lbs_per_week=goal.rate_lbs_per_week,
             candidate_target_kcal_per_day=on_track_target,
             evidence=evidence,
+            target_basis="measured_mean_intake",
+            expenditure_target_kcal=expenditure_target,
         )
 
     assessment = "intake_above_goal" if difference > 0 else "intake_below_goal"
@@ -432,7 +473,14 @@ def recommend(
             f"({goal.rate_lbs_per_week:+.2f}) by {difference:+.2f} lbs/week. "
             f"{direction.capitalize()} intake by about {abs(change)} kcal/day "
             f"to {target} kcal/day, then review in "
-            f"{policy.REVIEW_CADENCE_DAYS} days."
+            f"{policy.REVIEW_CADENCE_DAYS} days. This corrects from your measured "
+            "mean intake by the observed rate gap; the expenditure estimate alone "
+            "is too uncertain to set intake directly"
+            + (
+                f" (energy-balance cross-check: {expenditure_target} kcal/day)."
+                if expenditure_target is not None
+                else "."
+            )
         ),
         next_review_date=as_of + timedelta(days=policy.REVIEW_CADENCE_DAYS),
         protein_min_g=protein_min,
@@ -441,12 +489,25 @@ def recommend(
         goal_rate_lbs_per_week=goal.rate_lbs_per_week,
         candidate_target_kcal_per_day=int(round(candidate)),
         evidence=evidence,
+        target_basis="rate_correction",
+        expenditure_target_kcal=expenditure_target,
     )
+
+
+def _expenditure_target(
+    estimate: ExpenditureEstimate,
+    goal: GoalSpec | None,
+) -> int | None:
+    """Energy-balance target from the expenditure estimate and goal rate."""
+    if goal is None or estimate.kcal_per_day is None:
+        return None
+    return int(round(estimate.kcal_per_day + goal.rate_lbs_per_week * policy.KCAL_PER_LB_WEEK))
 
 
 def _evidence(estimate: ExpenditureEstimate) -> dict[str, object]:
     return {
         "segments_used": estimate.segments_used,
+        "confidence": estimate.confidence,
         "complete_intake_days": estimate.intake.complete_days,
         "partial_intake_days": estimate.intake.partial_days,
         "estimated_intake_days": estimate.intake.estimated_days,

@@ -4300,7 +4300,10 @@ def tdee_estimate(
                 f"  [bold]Estimated expenditure: "
                 f"{estimate.kcal_per_day:.0f}{uncertainty} kcal/day[/bold]"
             )
-        console.print(f"  Calendar segments used: {estimate.segments_used}")
+        console.print(
+            f"  Calendar segments used: {estimate.segments_used} "
+            f"(confidence: {estimate.confidence})"
+        )
         if estimate.intake.mean_kcal is not None:
             console.print(
                 f"  Mean logged intake: {estimate.intake.mean_kcal:.0f} kcal/day over "
@@ -4409,7 +4412,8 @@ def tdee_targets(
             )
             console.print(
                 f"  Estimated expenditure: {estimate.kcal_per_day:.0f}{uncertainty} kcal/day "
-                f"({estimate.method})"
+                f"({estimate.method}, confidence {estimate.confidence}, "
+                f"{estimate.segments_used} segment(s))"
             )
         if goal:
             console.print(f"  Goal: {goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)")
@@ -4432,12 +4436,19 @@ def tdee_targets(
         if recommendation.target_kcal_per_day is not None:
             console.print(
                 f"  [green]Calorie target:[/green] {recommendation.target_kcal_per_day} kcal/day"
+                f" (basis: {recommendation.target_basis or 'unspecified'})"
             )
             if recommendation.change_kcal_per_day is not None:
                 console.print(
                     f"  Change from measured intake: "
                     f"{recommendation.change_kcal_per_day:+d} kcal/day"
                 )
+        if recommendation.expenditure_target_kcal is not None:
+            console.print(
+                f"  Energy-balance cross-check: "
+                f"{recommendation.expenditure_target_kcal} kcal/day "
+                "(estimated TDEE + goal rate; shown for comparison, not the target)"
+            )
         else:
             console.print("  Calorie target: held (insufficient evidence)")
         if recommendation.protein_min_g is not None:
@@ -4548,6 +4559,9 @@ def tdee_progress(
                     },
                     "goal": report.goal.to_dict() if report.goal else None,
                     "goal_weight": report.goal_weight,
+                    "recommended_intake": report.target_kcal_per_day,
+                    "expenditure_target_kcal": report.expenditure_target_kcal,
+                    "target_basis": report.target_basis,
                     "remaining_lbs": report.remaining_lbs,
                     "weeks_to_goal": report.weeks_to_goal,
                     "notes": report.notes,

@@ -72,6 +72,7 @@ class TDEEFilter:
         implied_deficit: float,
         expected_deficit: float,
         calorie_coverage: float = 1.0,
+        obs_noise: float | None = None,
     ) -> float:
         """
         Update step: incorporate new observation.
@@ -87,6 +88,9 @@ class TDEEFilter:
                             = mifflin_tdee - planned_calories
             calorie_coverage: Fraction of days with calorie logs (0-1).
                              Lower coverage → higher observation noise.
+            obs_noise: Optional observation-noise variance in (kcal/day)^2 for
+                             this observation. Segment slope uncertainty belongs
+                             here; the default is only a fallback.
 
         Returns:
             Residual (z - x_predicted). Positive means observed deficit
@@ -102,7 +106,8 @@ class TDEEFilter:
         # Scale observation noise by calorie coverage
         # Fewer logged days → more uncertainty about actual intake
         effective_coverage = max(calorie_coverage, MIN_CALORIE_COVERAGE)
-        adjusted_obs_noise = self.obs_noise / effective_coverage
+        base_obs_noise = self.obs_noise if obs_noise is None else obs_noise
+        adjusted_obs_noise = base_obs_noise / effective_coverage
 
         # Kalman gain (using adjusted noise)
         kalman_gain = self.variance / (self.variance + adjusted_obs_noise)
@@ -121,6 +126,7 @@ class TDEEFilter:
         expected_deficit: float,
         days: int = 7,
         calorie_coverage: float = 1.0,
+        obs_noise: float | None = None,
     ) -> float:
         """
         Combined predict + update step for weekly observations.
@@ -130,12 +136,13 @@ class TDEEFilter:
             expected_deficit: Expected deficit from plan
             days: Days since last observation
             calorie_coverage: Fraction of days with calorie logs (0-1)
+            obs_noise: Optional per-observation noise variance
 
         Returns:
             Innovation value
         """
         self.predict(days)
-        return self.update(implied_deficit, expected_deficit, calorie_coverage)
+        return self.update(implied_deficit, expected_deficit, calorie_coverage, obs_noise)
 
     def get_adjusted_tdee(self, mifflin_tdee: float) -> tuple[float, float]:
         """
