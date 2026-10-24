@@ -13,6 +13,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
+from llmn.cli_tracking import activity_app, goal_app, intake_app
 from llmn.config import get_settings
 from llmn.db import get_db
 from llmn.db.queries import (
@@ -56,6 +57,9 @@ app.add_typer(user_app, name="user")
 app.add_typer(weight_app, name="weight")
 app.add_typer(calories_app, name="calories")
 app.add_typer(tdee_app, name="tdee")
+app.add_typer(intake_app, name="intake")
+app.add_typer(goal_app, name="goal")
+app.add_typer(activity_app, name="activity")
 
 
 # ============================================================================
@@ -73,15 +77,39 @@ def output_json(response: dict, file=None) -> None:
 
 
 def ensure_tracking_tables() -> None:
-    """Ensure tracking tables exist (idempotent)."""
-    from llmn.db.schema import migrate_user_profiles_add_diet_columns
+    """Ensure tracking tables and versioned migrations are applied."""
+    get_db().initialize_schema()
 
-    db = get_db()
-    db.initialize_schema()
 
-    # Run migrations for existing databases
-    with db.get_connection() as conn:
-        migrate_user_profiles_add_diet_columns(conn)
+def tracking_failure(command: str, error: Exception, json_output: bool) -> None:
+    """Render a structured tracking failure and exit nonzero."""
+    from llmn.tracking.errors import TrackingError
+
+    if isinstance(error, TrackingError):
+        message = error.message
+        code = error.code
+        suggestions = error.suggestions
+    else:
+        message = str(error)
+        code = "INVALID_INPUT"
+        suggestions = []
+
+    if json_output:
+        output_json({
+            "success": False,
+            "command": command,
+            "data": {},
+            "errors": [message],
+            "error_codes": [code],
+            "suggestions": suggestions,
+            "schema_version": 2,
+            "human_summary": f"Error: {message}",
+        })
+    else:
+        console.print(f"[red]{message}[/red]")
+        for suggestion in suggestions:
+            console.print(f"  {suggestion}")
+    raise typer.Exit(1)
 
 
 def require_food_data() -> None:
@@ -3287,46 +3315,50 @@ def weight_add(
     user_id: Optional[int] = typer.Option(None, "--user", help="User ID (default: first user)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Add a weight entry (EMA trend computed automatically)."""
-    from datetime import date, datetime
+    """Add a weight entry (gap-aware EMA trend computed automatically)."""
+    import math
+    from datetime import date
 
-    from llmn.tracking.queries import UserQueries, WeightQueries
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.queries import WeightQueries
+    from llmn.tracking.service import get_profile
 
-    db = get_db()
-
-    # Parse date
-    if date_str:
-        measured_at = date.fromisoformat(date_str)
-    else:
-        measured_at = date.today()
-
-    with db.get_connection() as conn:
-        # Get user
-        if user_id:
-            profile = UserQueries.get_user(conn, user_id)
+    command = "weight add"
+    try:
+        if not math.isfinite(weight) or weight <= 0:
+            raise TrackingError(
+                "INVALID_WEIGHT", "Weight must be a finite, positive number."
+            )
+        if date_str:
+            try:
+                measured_at = date.fromisoformat(date_str)
+            except ValueError as exc:
+                raise TrackingError(
+                    "INVALID_DATE",
+                    f"--date must be YYYY-MM-DD, got '{date_str}'.",
+                ) from exc
         else:
-            profile = UserQueries.get_default_user(conn)
+            measured_at = date.today()
+        if measured_at > date.today():
+            raise TrackingError(
+                "FUTURE_DATE", "Weight measurements cannot be dated in the future."
+            )
 
-        if profile is None:
-            if json_output:
-                output_json({
-                    "success": False,
-                    "command": "weight add",
-                    "errors": ["No user profile found"],
-                    "suggestions": ["Create a profile first: llmn user create ..."],
-                })
-            else:
-                console.print("[red]No user profile found. Create one first.[/red]")
-            raise typer.Exit(1)
-
-        entry = WeightQueries.add_weight(
-            conn, profile.user_id, weight, measured_at, notes  # type: ignore
-        )
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            entry = WeightQueries.add_weight(
+                conn, profile.user_id, weight, measured_at, notes
+            )
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
 
     if json_output:
         output_json({
             "success": True,
-            "command": "weight add",
+            "command": command,
             "data": {
                 "weight_lbs": entry.weight_lbs,
                 "trend_lbs": round(entry.trend_lbs, 1),
@@ -3337,6 +3369,46 @@ def weight_add(
     else:
         console.print(f"[green]Logged:[/green] {weight:.1f} lbs on {measured_at}")
         console.print(f"[blue]Trend:[/blue] {entry.trend_lbs:.1f} lbs (EMA)")
+
+
+@weight_app.command("delete")
+def weight_delete(
+    date_str: str = typer.Option(..., "--date", "-d", help="Date (YYYY-MM-DD)"),
+    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Delete a weight entry and rebuild subsequent trends."""
+    from datetime import date
+
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.queries import WeightQueries
+    from llmn.tracking.service import get_profile
+
+    command = "weight delete"
+    try:
+        measured_at = date.fromisoformat(date_str)
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            deleted = WeightQueries.delete_weight(conn, profile.user_id, measured_at)
+        if not deleted:
+            raise TrackingError(
+                "WEIGHT_NOT_FOUND", f"No weight entry found on {measured_at}."
+            )
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
+
+    if json_output:
+        output_json({
+            "success": True,
+            "command": command,
+            "data": {"measured_at": measured_at.isoformat(), "deleted": True},
+            "human_summary": f"Deleted weight entry for {measured_at}.",
+        })
+    else:
+        console.print(f"[green]Deleted[/green] weight entry for {measured_at}")
 
 
 @weight_app.command("list")
@@ -3478,47 +3550,63 @@ def calories_log(
     user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Log planned calorie intake for a day."""
+    """Log planned calorie intake for a day (not consumed intake)."""
+    import math
     from datetime import date
 
-    from llmn.tracking.queries import CalorieQueries, UserQueries
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.queries import CalorieQueries, IntakeQueries
+    from llmn.tracking.service import get_profile
 
-    db = get_db()
-
-    if date_str:
-        log_date = date.fromisoformat(date_str)
-    else:
-        log_date = date.today()
-
-    with db.get_connection() as conn:
-        if user_id:
-            profile = UserQueries.get_user(conn, user_id)
-        else:
-            profile = UserQueries.get_default_user(conn)
-
-        if profile is None:
-            if json_output:
-                output_json({"success": False, "errors": ["No user profile found"]})
-            else:
-                console.print("[red]No user profile found[/red]")
-            raise typer.Exit(1)
-
-        entry = CalorieQueries.log_calories(
-            conn, profile.user_id, log_date, calories, notes  # type: ignore
+    command = "calories log"
+    try:
+        if not math.isfinite(calories) or calories < 0:
+            raise TrackingError(
+                "INVALID_INTAKE", "Calories must be a finite, non-negative number."
+            )
+        log_date = (
+            date.fromisoformat(date_str) if date_str else date.today()
         )
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            entry = CalorieQueries.log_calories(
+                conn, profile.user_id, log_date, calories, notes
+            )
+            IntakeQueries.upsert(
+                conn,
+                profile.user_id,
+                log_date,
+                calories,
+                kind="planned",
+                completeness="complete",
+                quality="estimated",
+                provenance="calories_log_command",
+                notes=notes,
+            )
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
 
     if json_output:
         output_json({
             "success": True,
-            "command": "calories log",
+            "command": command,
             "data": {
                 "date": entry.date.isoformat(),
                 "planned_calories": entry.planned_calories,
+                "kind": "planned",
             },
-            "human_summary": f"Logged {calories:.0f} kcal for {log_date}",
+            "warnings": [
+                "Planned intake is not used as measured consumption. "
+                "Use 'llmn intake log' for actual intake."
+            ],
+            "human_summary": f"Logged {calories:.0f} planned kcal for {log_date}",
         })
     else:
-        console.print(f"[green]Logged:[/green] {calories:.0f} kcal for {log_date}")
+        console.print(f"[green]Logged planned:[/green] {calories:.0f} kcal for {log_date}")
+        console.print("[dim]Planned values are not used as actual intake.[/dim]")
 
 
 @calories_app.command("list")
@@ -3596,318 +3684,261 @@ def calories_list(
 @tdee_app.command("estimate")
 def tdee_estimate(
     user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    as_of_str: Optional[str] = typer.Option(
+        None, "--as-of", help="Analysis date (default: today)"
+    ),
+    window_days: int = typer.Option(
+        28, "--window-days", help="Inclusive analysis window in calendar days"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Run TDEE estimation using Kalman filter on weight/calorie data."""
-    from datetime import date, timedelta
+    """Estimate expenditure from actual intake and calendar-aware weight trends."""
+    from datetime import date
 
-    from llmn.tracking.diagnostics import (
-        calculate_mifflin_tdee,
-        calculate_mifflin_tdee_at_weight,
-    )
-    from llmn.tracking.models import TDEEEstimate
-    from llmn.tracking.queries import (
-        CalorieQueries,
-        TDEEQueries,
-        UserQueries,
-        WeightQueries,
-    )
-    from llmn.tracking.tdee_filter import TDEEFilter
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.service import analyze_and_persist
 
-    db = get_db()
-
-    with db.get_connection() as conn:
-        if user_id:
-            profile = UserQueries.get_user(conn, user_id)
-        else:
-            profile = UserQueries.get_default_user(conn)
-
-        if profile is None:
-            if json_output:
-                output_json({"success": False, "errors": ["No user profile found"]})
-            else:
-                console.print("[red]No user profile found[/red]")
-            raise typer.Exit(1)
-
-        uid = profile.user_id  # type: ignore
-
-        # Get weight history (last 8 weeks for weekly updates)
-        end_date = date.today()
-        start_date = end_date - timedelta(days=56)
-        weight_history = WeightQueries.get_weight_history(
-            conn, uid, start_date=start_date, end_date=end_date
-        )
-
-        if len(weight_history) < 7:
-            if json_output:
-                output_json({
-                    "success": False,
-                    "errors": ["Not enough weight data (need at least 1 week)"],
-                    "suggestions": ["Log your weight daily with: llmn weight add <weight>"],
-                })
-            else:
-                console.print("[yellow]Not enough weight data. Need at least 1 week.[/yellow]")
-            raise typer.Exit(1)
-
-        # Calculate baseline Mifflin-St Jeor TDEE (for final display)
-        mifflin_tdee = calculate_mifflin_tdee(profile)
-
-        # Always start fresh - recalculating from the 8-week history is cheap
-        # and avoids compounding bias if tdee estimate is run multiple times
-        tdee_filter = TDEEFilter()
-
-        # Run filter on weekly data
-        # Group weight data by week and compute trend changes
-        # Use time-varying baseline: recalculate Mifflin each week using that
-        # week's starting trend weight. This keeps the learned bias interpretable
-        # as "personal deviation from formula" rather than absorbing weight-drift.
-        weeks_processed = 0
-        for week_start in range(0, len(weight_history) - 7, 7):
-            week_entries = weight_history[week_start : week_start + 7]
-            if len(week_entries) < 2:
-                continue
-
-            trend_start = week_entries[0].trend_lbs
-            trend_end = week_entries[-1].trend_lbs
-
-            # Get average calories for this week
-            week_start_date = week_entries[0].measured_at
-            week_end_date = week_entries[-1].measured_at
-            avg_calories = CalorieQueries.get_average_calories(
-                conn, uid, week_start_date, week_end_date
+    command = "tdee estimate"
+    try:
+        if window_days < 2:
+            raise TrackingError(
+                "INVALID_WINDOW", "--window-days must be at least 2."
             )
+        as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+        if as_of > date.today():
+            raise TrackingError(
+                "FUTURE_DATE", "--as-of cannot be in the future."
+            )
+        db = get_db()
+        with db.get_connection() as conn:
+            analysis = analyze_and_persist(conn, user_id, as_of, window_days)
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
 
-            if avg_calories is None:
-                continue  # Skip weeks without calorie data
-
-            # Calculate Mifflin TDEE using this week's starting weight
-            # (time-varying baseline for accurate bias learning)
-            week_mifflin_tdee = calculate_mifflin_tdee_at_weight(profile, trend_start)
-
-            # Implied deficit from trend change
-            implied_deficit = (trend_start - trend_end) * 3500 / 7
-
-            # Expected deficit from plan (using this week's weight-adjusted TDEE)
-            expected_deficit = week_mifflin_tdee - avg_calories
-
-            # Update filter
-            tdee_filter.predict_and_update(implied_deficit, expected_deficit, days=7)
-            weeks_processed += 1
-
-        # Save estimate
-        adjusted_tdee, uncertainty = tdee_filter.get_adjusted_tdee(mifflin_tdee)
-        estimate = TDEEEstimate(
-            estimate_id=None,
-            user_id=uid,
-            estimated_at=end_date,
-            mifflin_tdee=mifflin_tdee,
-            tdee_bias=tdee_filter.bias,
-            variance=tdee_filter.variance,
-            adjusted_tdee=adjusted_tdee,
-        )
-        TDEEQueries.save_estimate(conn, estimate)
+    estimate = analysis.estimate
+    data = analysis.to_dict()
+    data["persisted"] = True
+    data["input_fingerprint"] = estimate.fingerprint
 
     if json_output:
         output_json({
             "success": True,
-            "command": "tdee estimate",
-            "data": {
-                "mifflin_tdee": round(mifflin_tdee, 0),
-                "tdee_bias": round(tdee_filter.bias, 0),
-                "adjusted_tdee": round(adjusted_tdee, 0),
-                "uncertainty_95ci": round(uncertainty, 0),
-                "weeks_processed": weeks_processed,
-            },
-            "human_summary": f"TDEE: {adjusted_tdee:.0f} ± {uncertainty:.0f} kcal/day (bias: {tdee_filter.bias:+.0f})",
+            "command": command,
+            "data": data,
+            "warnings": analysis.warnings,
+            "suggestions": [],
+            "human_summary": analysis.recommendation.recommendation_text,
+            "schema_version": 2,
         })
     else:
-        console.print(f"[green]Updated Total Daily Energy Expenditure (TDEE) estimate[/green] ({weeks_processed} weeks processed)")
-        console.print(f"  Mifflin-St Jeor baseline: {mifflin_tdee:.0f} kcal/day")
-        console.print(f"  Learned bias: {tdee_filter.bias:+.0f} kcal/day")
-        console.print(f"  [bold]Your TDEE: {adjusted_tdee:.0f} ± {uncertainty:.0f} kcal/day[/bold]")
-        console.print()
-        console.print("[dim]Run 'llmn tdee progress' for full report[/dim]")
+        console.print("[bold]Expenditure Estimate[/bold]")
+        console.print(f"  Method: {estimate.method}")
+        console.print(f"  Mifflin-St Jeor baseline: {estimate.mifflin_tdee:.0f} kcal/day")
+        if estimate.bias is not None:
+            console.print(f"  Learned bias: {estimate.bias:+.0f} kcal/day")
+        if estimate.kcal_per_day is not None:
+            uncertainty = (
+                f" ± {estimate.uncertainty_95ci:.0f}"
+                if estimate.uncertainty_95ci is not None
+                else ""
+            )
+            console.print(
+                f"  [bold]Estimated expenditure: {estimate.kcal_per_day:.0f}{uncertainty} kcal/day[/bold]"
+            )
+        console.print(f"  Calendar segments used: {estimate.segments_used}")
+        console.print(
+            f"  Actual intake coverage: {estimate.intake.weighted_coverage:.0%} "
+            f"({estimate.intake.complete_days} complete days)"
+        )
+        if analysis.reason_codes:
+            console.print(f"  Reasons: {', '.join(analysis.reason_codes)}")
 
 
 @tdee_app.command("targets")
 def tdee_targets(
     user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    as_of_str: Optional[str] = typer.Option(
+        None, "--as-of", help="Analysis date (default: today)"
+    ),
+    window_days: int = typer.Option(
+        28, "--window-days", help="Inclusive analysis window in calendar days"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Get adaptive calorie/macro targets based on current progress."""
-    from datetime import date, timedelta
+    """Get a bounded calorie recommendation from current inputs."""
+    from datetime import date
 
-    from llmn.tracking.diagnostics import calculate_mifflin_tdee, generate_weight_report
-    from llmn.tracking.queries import CalorieQueries, TDEEQueries, UserQueries
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.service import analyze
 
-    db = get_db()
+    command = "tdee targets"
+    try:
+        if window_days < 2:
+            raise TrackingError(
+                "INVALID_WINDOW", "--window-days must be at least 2."
+            )
+        as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+        if as_of > date.today():
+            raise TrackingError(
+                "FUTURE_DATE", "--as-of cannot be in the future."
+            )
+        db = get_db()
+        with db.get_connection() as conn:
+            analysis = analyze(conn, user_id, as_of, window_days)
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
 
-    with db.get_connection() as conn:
-        if user_id:
-            profile = UserQueries.get_user(conn, user_id)
-        else:
-            profile = UserQueries.get_default_user(conn)
+    estimate = analysis.estimate
+    recommendation = analysis.recommendation
+    goal = analysis.goal
 
-        if profile is None:
-            if json_output:
-                output_json({"success": False, "errors": ["No user profile found"]})
-            else:
-                console.print("[red]No user profile found[/red]")
-            raise typer.Exit(1)
-
-        uid = profile.user_id  # type: ignore
-        latest_estimate = TDEEQueries.get_latest_estimate(conn, uid)
-
-        # Get current intake and weight loss rate
-        end_date = date.today()
-        start_date = end_date - timedelta(days=30)
-        avg_intake = CalorieQueries.get_average_calories(conn, uid, start_date, end_date)
-        weight_report = generate_weight_report(conn, uid, days=30)
-
-    # Use estimate if available, otherwise Mifflin-St Jeor
-    if latest_estimate:
-        tdee = latest_estimate.adjusted_tdee
-        uncertainty = latest_estimate.uncertainty_95ci
-    else:
-        tdee = calculate_mifflin_tdee(profile)
-        uncertainty = 100  # Default uncertainty for no data
-
-    # Determine target rate based on goal
-    goal = profile.goal
-    if goal and goal.startswith("fat_loss"):
-        target_rate = -1.0  # 1 lb/week loss
-        goal_desc = "fat loss (1 lb/week)"
-    elif goal and goal.startswith("aggressive"):
-        target_rate = -1.5  # 1.5 lb/week loss
-        goal_desc = "aggressive fat loss (1.5 lb/week)"
-    elif goal and goal.startswith("lean_gain"):
-        target_rate = 0.5  # 0.5 lb/week gain
-        goal_desc = "lean gain (0.5 lb/week)"
-    elif goal and goal.startswith("muscle_gain"):
-        target_rate = 1.0  # 1 lb/week gain
-        goal_desc = "muscle gain (1 lb/week)"
-    else:
-        target_rate = 0.0
-        goal_desc = "maintenance"
-
-    # Current situation
-    current_rate = weight_report.weekly_rate if weight_report else 0.0
-    current_intake = avg_intake if avg_intake else tdee  # Assume maintenance if no data
-
-    # Calculate what intake would achieve target rate
-    # target_rate (lbs/week) * 500 = daily calorie change needed
-    target_deficit = -target_rate * 500  # positive = deficit, negative = surplus
-    target_calories = tdee - target_deficit
-
-    # Protein: 0.8-1.0 g/lb for fat loss, 0.7-0.8 for maintenance
-    weight = profile.weight_lbs
-    if target_rate < 0:  # Cutting
-        protein_min = int(weight * 0.8)
-        protein_max = int(weight * 1.0)
-    else:
-        protein_min = int(weight * 0.7)
-        protein_max = int(weight * 0.9)
-
-    # Generate recommendation based on current progress
-    recommendation = None
-    recommended_intake = target_calories  # Default to theoretical target
-
-    if weight_report and avg_intake:
-        rate_diff = current_rate - target_rate
-        if abs(rate_diff) < 0.2:
-            # On track - keep current intake
-            recommendation = "You're on track! Keep doing what you're doing."
-            recommended_intake = current_intake
-        elif target_rate < 0:  # Trying to lose
-            if current_rate > target_rate + 0.2:  # Not losing fast enough (rate is less negative)
-                cal_adjust = int((current_rate - target_rate) * 500)
-                recommended_intake = current_intake - cal_adjust
-                recommendation = f"Losing slower than target. Consider reducing intake by ~{cal_adjust} kcal/day."
-            elif current_rate < target_rate - 0.2:  # Losing too fast (rate is more negative)
-                cal_adjust = int((target_rate - current_rate) * 500)
-                recommended_intake = current_intake + abs(cal_adjust)
-                recommendation = f"Losing faster than target ({abs(current_rate):.1f} lb/week). Consider increasing intake by ~{abs(cal_adjust)} kcal/day to preserve muscle."
-        elif target_rate > 0:  # Trying to gain
-            if current_rate < target_rate - 0.2:  # Not gaining fast enough
-                cal_adjust = int((target_rate - current_rate) * 500)
-                recommended_intake = current_intake + cal_adjust
-                recommendation = f"Gaining slower than target. Consider increasing intake by ~{cal_adjust} kcal/day."
+    data = analysis.to_dict()
+    # Compatibility fields retained from the previous flat targets payload.
+    data.update({
+        "tdee": (
+            round(estimate.kcal_per_day, 0)
+            if estimate.kcal_per_day is not None
+            else None
+        ),
+        "tdee_uncertainty": (
+            round(estimate.uncertainty_95ci, 0)
+            if estimate.uncertainty_95ci is not None
+            else None
+        ),
+        "goal_description": (
+            f"{goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)"
+            if goal
+            else None
+        ),
+        "target_rate_lbs_week": goal.rate_lbs_per_week if goal else None,
+        "current_rate_lbs_week": (
+            round(estimate.observed_rate_lbs_per_week, 2)
+            if estimate.observed_rate_lbs_per_week is not None
+            else None
+        ),
+        "current_intake": (
+            round(estimate.intake.mean_kcal, 0)
+            if estimate.intake.mean_kcal is not None
+            else None
+        ),
+        "recommended_intake": recommendation.target_kcal_per_day,
+        "protein_min": recommendation.protein_min_g,
+        "protein_max": recommendation.protein_max_g,
+        "recommendation_text": recommendation.recommendation_text,
+    })
 
     if json_output:
         output_json({
             "success": True,
-            "command": "tdee targets",
-            "data": {
-                "tdee": round(tdee, 0),
-                "tdee_uncertainty": round(uncertainty, 0),
-                "goal": goal_desc,
-                "target_rate_lbs_week": target_rate,
-                "current_rate_lbs_week": round(current_rate, 2) if weight_report else None,
-                "current_intake": round(current_intake, 0) if avg_intake else None,
-                "recommended_intake": round(recommended_intake, 0),
-                "protein_min": protein_min,
-                "protein_max": protein_max,
-                "recommendation": recommendation,
-            },
-            "human_summary": recommendation or f"Target: {recommended_intake:.0f} kcal/day for {goal_desc}",
+            "command": command,
+            "data": data,
+            "warnings": analysis.warnings,
+            "suggestions": [],
+            "human_summary": recommendation.recommendation_text,
+            "schema_version": 2,
         })
     else:
         console.print("[bold]Adaptive Calorie Targets[/bold]")
-        console.print(f"  Estimated TDEE: {tdee:.0f} ± {uncertainty:.0f} kcal/day")
-        console.print(f"  Goal: {goal_desc}")
-        console.print()
+        console.print(f"  Assessment: {recommendation.assessment}")
+        if estimate.kcal_per_day is not None:
+            uncertainty = (
+                f" ± {estimate.uncertainty_95ci:.0f}"
+                if estimate.uncertainty_95ci is not None
+                else ""
+            )
+            console.print(
+                f"  Estimated expenditure: {estimate.kcal_per_day:.0f}{uncertainty} kcal/day "
+                f"({estimate.method})"
+            )
+        if goal:
+            console.print(
+                f"  Goal: {goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)"
+            )
+        else:
+            console.print("  Goal: not set")
 
-        if weight_report and avg_intake:
+        if estimate.observed_rate_lbs_per_week is not None:
+            console.print()
             console.print("[bold]Current status:[/bold]")
-            console.print(f"  Average intake: {current_intake:.0f} kcal/day")
-            rate_dir = "losing" if current_rate < 0 else "gaining" if current_rate > 0 else "maintaining"
-            console.print(f"  Current rate: {abs(current_rate):.1f} lbs/week ({rate_dir})")
-            console.print()
+            if estimate.intake.mean_kcal is not None:
+                console.print(
+                    f"  Average actual intake: {estimate.intake.mean_kcal:.0f} kcal/day"
+                )
+            console.print(
+                f"  Observed rate: {estimate.observed_rate_lbs_per_week:+.2f} lbs/week"
+            )
+            console.print(
+                f"  Intake coverage: {estimate.intake.weighted_coverage:.0%} "
+                f"({estimate.intake.complete_days} complete days)"
+            )
 
+        console.print()
         console.print("[bold]Recommendation:[/bold]")
-        console.print(f"  [green]Calorie target:[/green] {recommended_intake:.0f} kcal/day")
-        console.print(f"  [green]Protein range:[/green] {protein_min} - {protein_max} g/day")
-
-        if recommendation:
-            console.print()
-            console.print(f"  [cyan]{recommendation}[/cyan]")
+        if recommendation.target_kcal_per_day is not None:
+            console.print(
+                f"  [green]Calorie target:[/green] {recommendation.target_kcal_per_day} kcal/day"
+            )
+            if recommendation.change_kcal_per_day is not None:
+                console.print(
+                    f"  Change from measured intake: "
+                    f"{recommendation.change_kcal_per_day:+d} kcal/day"
+                )
+        else:
+            console.print("  Calorie target: held (insufficient evidence)")
+        if recommendation.protein_min_g is not None:
+            console.print(
+                f"  [green]Protein range:[/green] "
+                f"{recommendation.protein_min_g} - {recommendation.protein_max_g} g/day"
+            )
+        console.print()
+        console.print(f"  [cyan]{recommendation.recommendation_text}[/cyan]")
+        if recommendation.reason_codes:
+            console.print(f"  [dim]Reasons: {', '.join(recommendation.reason_codes)}[/dim]")
 
 
 @tdee_app.command("progress")
 def tdee_progress(
-    days: int = typer.Option(30, "--days", "-d", help="Number of days to analyze"),
+    days: int = typer.Option(30, "--days", "-d", help="Calendar days to analyze"),
+    as_of_str: Optional[str] = typer.Option(
+        None, "--as-of", help="Analysis date (default: today)"
+    ),
     user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
-    """Show comprehensive weight loss progress report."""
+    """Show a progress report plus the shared standalone analysis."""
+    from datetime import date
+
     from llmn.tracking.diagnostics import (
         format_progress_report,
         generate_progress_report,
     )
-    from llmn.tracking.queries import UserQueries
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.service import analyze, get_profile
 
-    db = get_db()
-
-    with db.get_connection() as conn:
-        if user_id:
-            profile = UserQueries.get_user(conn, user_id)
-        else:
-            profile = UserQueries.get_default_user(conn)
-
-        if profile is None:
-            if json_output:
-                output_json({"success": False, "errors": ["No user profile found"]})
-            else:
-                console.print("[red]No user profile found[/red]")
-            raise typer.Exit(1)
-
-        uid = profile.user_id  # type: ignore
-        report = generate_progress_report(conn, uid, days)
+    command = "tdee progress"
+    try:
+        as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
+        if as_of > date.today():
+            raise TrackingError("FUTURE_DATE", "--as-of cannot be in the future.")
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            report = generate_progress_report(
+                conn, profile.user_id, days, as_of=as_of
+            )
+            analysis = analyze(conn, user_id, as_of, days)
+    except (TrackingError, ValueError) as error:
+        tracking_failure(command, error, json_output)
+        return
 
     if report is None:
         if json_output:
             output_json({
                 "success": False,
+                "command": command,
                 "errors": ["Not enough weight data for progress report"],
                 "suggestions": ["Log at least 2 weight entries with: llmn weight add <weight>"],
             })
@@ -3919,7 +3950,7 @@ def tdee_progress(
     if json_output:
         output_json({
             "success": True,
-            "command": "tdee progress",
+            "command": command,
             "data": {
                 "weight": {
                     "current_weight": report.weight.current_weight,
@@ -3934,7 +3965,8 @@ def tdee_progress(
                     "tdee_bias": report.tdee.tdee_bias,
                     "adjusted_tdee": report.tdee.adjusted_tdee,
                     "uncertainty_95ci": report.tdee.uncertainty_95ci,
-                    "avg_planned_calories": report.tdee.avg_planned_calories,
+                    "avg_actual_calories": report.tdee.avg_actual_calories,
+                    "avg_planned_calories": report.tdee.avg_actual_calories,
                     "expected_deficit": report.tdee.expected_deficit,
                     "implied_deficit": report.tdee.implied_deficit,
                 } if report.tdee else None,
@@ -3942,11 +3974,19 @@ def tdee_progress(
                 "remaining_lbs": report.remaining_lbs,
                 "weeks_to_goal": report.weeks_to_goal,
                 "notes": report.notes,
+                "analysis": analysis.to_dict(),
             },
-            "human_summary": f"Lost {abs(report.weight.trend_change):.1f} lbs over {report.weight.period_days} days ({abs(report.weight.weekly_rate):.1f} lbs/week)",
+            "warnings": analysis.warnings,
+            "human_summary": analysis.recommendation.recommendation_text,
+            "schema_version": 2,
         })
     else:
         console.print(format_progress_report(report))
+        console.print()
+        console.print(
+            f"[bold]Assessment:[/bold] {analysis.recommendation.assessment}"
+        )
+        console.print(f"  {analysis.recommendation.recommendation_text}")
 
 
 if __name__ == "__main__":

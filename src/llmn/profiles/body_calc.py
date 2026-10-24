@@ -47,6 +47,44 @@ ACTIVITY_MULTIPLIERS = {
     ActivityLevel.VERY_ACTIVE: 1.9,
 }
 
+# Tracking profiles use "lightly_active"; the older body-calculation API uses
+# "light". Accept both at the boundary rather than leaking the difference.
+_ACTIVITY_ALIASES = {
+    "sedentary": ActivityLevel.SEDENTARY,
+    "light": ActivityLevel.LIGHT,
+    "lightly_active": ActivityLevel.LIGHT,
+    "moderate": ActivityLevel.MODERATE,
+    "active": ActivityLevel.ACTIVE,
+    "very_active": ActivityLevel.VERY_ACTIVE,
+}
+
+
+def normalize_sex(value: Sex | str) -> Sex:
+    """Normalize a sex value or enum member to :class:`Sex`.
+
+    Tracking profiles store sex as a string, while the body-calculation API
+    takes an enum. Comparing a raw string to ``Sex.MALE`` silently fell through
+    to the female branch; this function makes the boundary explicit.
+    """
+    if isinstance(value, Sex):
+        return value
+    try:
+        return Sex(value.strip().lower())
+    except ValueError as exc:
+        raise ValueError(f"sex must be 'male' or 'female', got '{value}'") from exc
+
+
+def normalize_activity_level(value: ActivityLevel | str) -> ActivityLevel:
+    """Normalize an activity level string or enum member to :class:`ActivityLevel`."""
+    if isinstance(value, ActivityLevel):
+        return value
+    key = value.strip().lower()
+    try:
+        return _ACTIVITY_ALIASES[key]
+    except KeyError as exc:
+        valid = ", ".join(sorted(_ACTIVITY_ALIASES))
+        raise ValueError(f"activity_level must be one of {valid}, got '{value}'") from exc
+
 # Calorie adjustments by goal (deficit or surplus from TDEE)
 GOAL_ADJUSTMENTS = {
     Goal.FAT_LOSS: (-750, -500),           # 500-750 cal deficit
@@ -131,7 +169,7 @@ class NutritionTargets:
 
 def calculate_bmr(
     age: int,
-    sex: Sex,
+    sex: Sex | str,
     height_inches: float,
     weight_lbs: float,
 ) -> float:
@@ -149,9 +187,10 @@ def calculate_bmr(
     # Convert to metric
     weight_kg = weight_lbs * 0.453592
     height_cm = height_inches * 2.54
+    sex_enum = normalize_sex(sex)
 
     # Mifflin-St Jeor equation
-    if sex == Sex.MALE:
+    if sex_enum == Sex.MALE:
         bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + 5
     else:
         bmr = (10 * weight_kg) + (6.25 * height_cm) - (5 * age) - 161
@@ -161,7 +200,7 @@ def calculate_bmr(
 
 def calculate_tdee(
     bmr: float,
-    activity_level: ActivityLevel,
+    activity_level: ActivityLevel | str,
 ) -> float:
     """Calculate Total Daily Energy Expenditure.
 
@@ -172,7 +211,7 @@ def calculate_tdee(
     Returns:
         TDEE in calories per day
     """
-    multiplier = ACTIVITY_MULTIPLIERS[activity_level]
+    multiplier = ACTIVITY_MULTIPLIERS[normalize_activity_level(activity_level)]
     return bmr * multiplier
 
 
@@ -200,9 +239,9 @@ def calculate_targets(
         NutritionTargets with calorie and macro recommendations
     """
     # Parse enums
-    sex_enum = Sex(sex.lower())
+    sex_enum = normalize_sex(sex)
     goal_enum = Goal(goal.lower())
-    activity_enum = ActivityLevel(activity_level.lower())
+    activity_enum = normalize_activity_level(activity_level)
 
     # Calculate BMR and TDEE
     bmr = calculate_bmr(age, sex_enum, height_inches, weight_lbs)

@@ -114,15 +114,26 @@ uv run llmn user create --age 38 --sex male --height 72 --activity moderate
 uv run llmn user update --weight 185 --goal "fat_loss:165"
 uv run llmn user show                  # Show current user profile
 
-uv run llmn weight add 184.2           # Log today's weight (EMA computed)
+uv run llmn weight add 184.2           # Log today's weight (gap-aware EMA)
 uv run llmn weight add 183.8 --date 2025-12-27
-uv run llmn weight list --days 30      # Show weight history with trends
+uv run llmn weight list --days 30      # Calendar interval with trends
+uv run llmn weight delete --date 2025-12-27  # Rebuild later trends
 
-uv run llmn calories log 1900          # Log planned intake for today
+uv run llmn intake log 2000            # Actual intake (used for learning)
+uv run llmn intake log 2000 --date 2025-12-27 --quality estimated
+uv run llmn intake list --days 30      # Entries + actual-intake coverage
+uv run llmn intake confirm-legacy --all # Preview classification of old rows
+
+uv run llmn goal set --mode loss --rate -1.0 --target 165
+uv run llmn goal show                  # Resolve the effective dated goal
+uv run llmn activity set --level moderate
+
+uv run llmn calories log 1900          # Legacy *planned* intake (not consumed)
 uv run llmn calories log 1900 --date 2025-12-27
 
-uv run llmn tdee estimate              # Run Kalman filter on accumulated data
-uv run llmn tdee progress              # Show comprehensive progress report
+uv run llmn tdee estimate --as-of 2025-12-27  # Persist a snapshot
+uv run llmn tdee targets --as-of 2025-12-27   # Bounded recommendation/hold
+uv run llmn tdee progress              # Progress + shared analysis
 ```
 
 ### Agent/LLM Commands

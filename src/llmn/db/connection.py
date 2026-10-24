@@ -50,9 +50,12 @@ class DatabaseConnection:
             conn.close()
 
     def initialize_schema(self) -> None:
-        """Create all tables if they don't exist."""
+        """Create all tables and apply pending versioned migrations."""
+        from llmn.db.migrations import migrate_schema
+
         with self.get_connection() as conn:
             conn.executescript(get_schema_sql())
+            migrate_schema(conn)
 
     def execute_query(
         self, query: str, params: tuple = ()
@@ -140,13 +143,13 @@ def get_db() -> DatabaseConnection:
     return _db
 
 
-def set_db(db: DatabaseConnection) -> None:
-    """Set the global database instance.
+def set_db(db: Optional[DatabaseConnection]) -> None:
+    """Set (or clear) the global database instance.
 
     Useful for testing with a custom database.
 
     Args:
-        db: DatabaseConnection instance to use
+        db: DatabaseConnection instance to use, or None to reset
     """
     global _db
     _db = db
