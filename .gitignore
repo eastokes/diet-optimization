@@ -205,3 +205,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# USDA FoodData Central downloads (large; fetch separately with llmn init)
+FoodData_Central_csv_*/
+FoodData_Central_*.zip
