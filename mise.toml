@@ -1,0 +1,49 @@
+[tools]
+python = "3.12.12"
+uv = "0.9.17"
+
+[tasks.sync]
+description = "Install the project and development dependencies from uv.lock"
+run = "uv sync --locked --extra dev"
+
+[tasks.lock]
+description = "Refresh uv.lock after changing dependencies"
+run = "uv lock"
+
+[tasks.test]
+description = "Run tests (append pytest arguments to select tests)"
+depends = ["sync"]
+run = "uv run --no-sync pytest tests/ -v"
+
+[tasks.test-cov]
+description = "Run tests with terminal and HTML coverage reports"
+depends = ["sync"]
+run = "uv run --no-sync pytest tests/ --cov=llmn --cov-report=term-missing --cov-report=html"
+
+[tasks.lint]
+description = "Check source and tests with Ruff"
+depends = ["sync"]
+run = "uv run --no-sync ruff check src/ tests/"
+
+[tasks.format]
+description = "Format source and tests with Ruff"
+depends = ["sync"]
+run = "uv run --no-sync ruff format src/ tests/"
+
+[tasks.format-check]
+description = "Check formatting without changing files"
+depends = ["sync"]
+run = "uv run --no-sync ruff format --check src/ tests/"
+
+[tasks.typecheck]
+description = "Type check the application with mypy"
+depends = ["sync"]
+run = "uv run --no-sync mypy src/llmn/"
+
+[tasks.check]
+description = "Run tests, lint, formatting checks, and type checks"
+depends = ["test", "lint", "format-check", "typecheck"]
+
+[tasks.build]
+description = "Build the source distribution and wheel in an isolated environment"
+run = "uv build"
