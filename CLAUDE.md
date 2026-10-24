@@ -38,25 +38,26 @@ Codex CLI, and other LLM agents for iterative diet planning.
 
 ## Development Commands
 
+Use the reviewed repository mise config for Python and uv. See `README.md` for
+task descriptions. Tasks use the locked `dev` extra from `uv.lock`.
+
 ``` bash
-# Install in development mode
-pip install -e ".[dev]"
-
-# Run all tests
-pytest tests/ -v
-
-# Run a single test file
-pytest tests/test_solver.py -v
-
-# Run a specific test
-pytest tests/test_solver.py::TestSolveLP::test_simple_optimization -v
-
-# Lint with ruff
-ruff check src/
-
-# Type check with mypy
-mypy src/llmn/
+mise trust mise.toml
+mise install
+mise run sync
+mise run test
+mise run test -- -k test_simple_optimization
+mise run test-cov
+mise run lint
+mise run format-check
+mise run format
+mise run typecheck
+mise run check
+mise run build
 ```
+
+After changing dependencies in `pyproject.toml`, run `mise run lock` and review
+`uv.lock`. Use `mise exec -- uv run --locked llmn <command>` for the application.
 
 ## Git Workflow
 

@@ -618,16 +618,38 @@ Example profiles in `examples/constraints/`:
 
 ## Development
 
+The repository uses mise to pin Python and uv, and `uv.lock` to lock Python
+packages, including the development tools. Install mise first, then review
+`mise.toml` and trust this repository's config:
+
 ``` bash
-# Run tests
-pytest tests/ -v
-
-# Lint
-ruff check src/
-
-# Type check
-mypy src/llmn/
+mise trust mise.toml
+mise install
+mise run sync
 ```
+
+List tasks with `mise tasks`. The main tasks are:
+
+| Command | Purpose |
+| --- | --- |
+| `mise run test` | Run the full pytest suite |
+| `mise run test -- -k test_name` | Select tests using pytest arguments |
+| `mise run test-cov` | Run tests with terminal and HTML coverage (`htmlcov/`) |
+| `mise run lint` | Check source and tests with Ruff |
+| `mise run format` | Format source and tests in place |
+| `mise run format-check` | Check formatting without editing files |
+| `mise run typecheck` | Run strict mypy checks on the application |
+| `mise run check` | Run tests, lint, format checks, and type checks |
+| `mise run build` | Build the source distribution and wheel in `dist/` |
+| `mise run lock` | Refresh `uv.lock` after dependency changes |
+
+Test, lint, format, and type-check tasks install locked development dependencies
+through the shared `sync` prerequisite. Checks report existing failures rather
+than suppressing them. Ruff and mypy target Python 3.11, the package's minimum
+supported version; the development interpreter is pinned separately in mise.
+
+Run the CLI with `mise exec -- uv run --locked llmn --help`. Food database setup
+is separate from development setup; see the installation and quick-start sections.
 
 ## License
 
