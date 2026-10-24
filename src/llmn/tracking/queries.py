@@ -26,9 +26,14 @@ class UserQueries:
     _SELECT = """
         SELECT user_id, age, sex, height_inches, weight_lbs,
                activity_level, goal, target_weight_lbs,
-               diet_type, diet_style, created_at
+               diet_type, diet_style, created_at,
+               birthdate, resting_metabolic_rate, rmr_measured_at, rmr_source
         FROM user_profiles
     """
+
+    @staticmethod
+    def _optional_date(value: object) -> date | None:
+        return date.fromisoformat(str(value)) if value else None
 
     @staticmethod
     def _from_row(row: sqlite3.Row) -> UserProfile:
@@ -44,6 +49,10 @@ class UserQueries:
             diet_type=row[8],
             diet_style=row[9],
             created_at=datetime.fromisoformat(row[10]) if row[10] else None,
+            birthdate=UserQueries._optional_date(row[11]),
+            resting_metabolic_rate=row[12],
+            rmr_measured_at=UserQueries._optional_date(row[13]),
+            rmr_source=row[14],
         )
 
     @staticmethod
@@ -53,8 +62,10 @@ class UserQueries:
             """
             INSERT INTO user_profiles (age, sex, height_inches, weight_lbs,
                                        activity_level, goal, target_weight_lbs,
-                                       diet_type, diet_style)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       diet_type, diet_style, birthdate,
+                                       resting_metabolic_rate, rmr_measured_at,
+                                       rmr_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 profile.age,
@@ -66,6 +77,10 @@ class UserQueries:
                 profile.target_weight_lbs,
                 profile.diet_type,
                 profile.diet_style,
+                profile.birthdate.isoformat() if profile.birthdate else None,
+                profile.resting_metabolic_rate,
+                profile.rmr_measured_at.isoformat() if profile.rmr_measured_at else None,
+                profile.rmr_source,
             ),
         )
         conn.commit()
@@ -97,7 +112,8 @@ class UserQueries:
             UPDATE user_profiles
             SET age = ?, sex = ?, height_inches = ?, weight_lbs = ?,
                 activity_level = ?, goal = ?, target_weight_lbs = ?,
-                diet_type = ?, diet_style = ?
+                diet_type = ?, diet_style = ?, birthdate = ?,
+                resting_metabolic_rate = ?, rmr_measured_at = ?, rmr_source = ?
             WHERE user_id = ?
             """,
             (
@@ -110,6 +126,10 @@ class UserQueries:
                 profile.target_weight_lbs,
                 profile.diet_type,
                 profile.diet_style,
+                profile.birthdate.isoformat() if profile.birthdate else None,
+                profile.resting_metabolic_rate,
+                profile.rmr_measured_at.isoformat() if profile.rmr_measured_at else None,
+                profile.rmr_source,
                 profile.user_id,
             ),
         )
@@ -851,7 +871,7 @@ class TDEEQueries:
         SELECT estimate_id, user_id, estimated_at, mifflin_tdee, tdee_bias,
                variance, adjusted_tdee, method, policy_version, interval_start,
                interval_end, weight_observations, complete_intake_days,
-               partial_intake_days, input_fingerprint
+               partial_intake_days, input_fingerprint, baseline_source
         FROM tdee_estimates
     """
 
@@ -873,6 +893,7 @@ class TDEEQueries:
             complete_intake_days=row[12],
             partial_intake_days=row[13],
             input_fingerprint=row[14],
+            baseline_source=row[15],
         )
 
     @staticmethod
@@ -884,8 +905,8 @@ class TDEEQueries:
             (user_id, estimated_at, mifflin_tdee, tdee_bias, variance,
              adjusted_tdee, method, policy_version, interval_start, interval_end,
              weight_observations, complete_intake_days, partial_intake_days,
-             input_fingerprint)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             input_fingerprint, baseline_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 estimate.user_id,
@@ -902,6 +923,7 @@ class TDEEQueries:
                 estimate.complete_intake_days,
                 estimate.partial_intake_days,
                 estimate.input_fingerprint,
+                estimate.baseline_source,
             ),
         )
         conn.commit()

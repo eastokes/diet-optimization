@@ -67,9 +67,19 @@ uv run llmn user show
 If no profile exists, create one:
 
 ```bash
-uv run llmn user create --age 38 --sex male --height 72 --activity moderate
+# Preferred: a birthdate keeps the formula age from going stale
+uv run llmn user create --birthdate 1981-11-01 --sex male --height 73 --weight 177
+uv run llmn user create --age 38 --sex male --height 72 --weight 185
+
+# Optional: a measured RMR (DEXA, indirect calorimetry) replaces the
+# Mifflin-St Jeor resting term; the activity multiplier still applies
+uv run llmn user update --rmr 1850 --rmr-date 2026-09-17 --rmr-source dexa
 uv run llmn user update --weight 185 --goal "fat_loss:165"
 ```
+
+`llmn user show` reports `age_source` (`birthdate` or `stored_age`) and
+`baseline_source` (`measured_rmr` or `mifflin`). Never state a learned TDEE
+without saying which baseline it was learned against.
 
 **Activity levels**: `sedentary`, `lightly_active`, `moderate`, `active`, `very_active`
 

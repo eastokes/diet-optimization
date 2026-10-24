@@ -236,7 +236,7 @@ def recommend(
             estimate.weights.latest_entry is None and estimate.intake.complete_days == 0
         )
         if no_observations:
-            candidate = _formula_target(estimate.mifflin_tdee, goal.rate_lbs_per_week)
+            candidate = _formula_target(estimate.baseline_kcal, goal.rate_lbs_per_week)
             target = int(round(candidate))
             floor = _safety_floor(profile)
             if target < floor:

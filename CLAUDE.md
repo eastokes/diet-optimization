@@ -125,9 +125,18 @@ uv run llmn profile wizard             # Interactive profile creation wizard
 
 ### Weight Tracking Commands
 ``` bash
-uv run llmn user create --age 38 --sex male --height 72 --activity moderate
+uv run llmn user create --birthdate 1981-11-01 --sex male --height 73 --weight 177
+uv run llmn user create --age 38 --sex male --height 72 --weight 185   # age-only profile
+uv run llmn user update --rmr 1850 --rmr-date 2026-09-17 --rmr-source dexa
 uv run llmn user update --weight 185 --goal "fat_loss:165"
+uv run llmn user update --clear-rmr    # revert to Mifflin-St Jeor
 uv run llmn user show                  # Show current user profile
+
+Birthdate (preferred) keeps the age used by energy formulas current; `--age`
+remains for profiles that cannot record a birthdate. A recorded measured RMR
+(for example a DEXA resting metabolic rate) replaces the Mifflin-St Jeor
+resting component, while the activity multiplier still applies. The analysis
+reports which baseline it used (`baseline_source: mifflin | measured_rmr`).
 
 uv run llmn weight add 184.2           # Log today's weight (gap-aware EMA)
 uv run llmn weight add 183.8 --date 2025-12-27

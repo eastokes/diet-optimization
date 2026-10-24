@@ -25,6 +25,12 @@ MIN_SEGMENT_INTAKE_COVERAGE = 0.5
 FORMULA_UNCERTAINTY_KCAL = 250.0
 FORMULA_UNCERTAINTY_95CI = 1.96 * FORMULA_UNCERTAINTY_KCAL
 
+# Baseline uncertainty when the resting component is measured rather than
+# predicted. A measured RMR removes the Mifflin-St Jeor error term but leaves
+# real activity-multiplier uncertainty, so this is smaller, not tiny.
+MEASURED_RMR_UNCERTAINTY_KCAL = 200.0
+MEASURED_RMR_UNCERTAINTY_95CI = 1.96 * MEASURED_RMR_UNCERTAINTY_KCAL
+
 # Recommendation guardrails.
 RATE_TOLERANCE_LBS_PER_WEEK = 0.2
 KCAL_PER_LB_WEEK = 500.0  # 3500 kcal/lb over 7 days

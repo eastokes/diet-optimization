@@ -105,12 +105,27 @@ def _migration_3_legacy_calories(conn: sqlite3.Connection) -> None:
     )
 
 
+def _migration_4_birthdate_and_rmr(conn: sqlite3.Connection) -> None:
+    """Store a birthdate (derivable age) and an optional measured RMR.
+
+    ``age`` stays for compatibility and for profiles that only know their age;
+    a birthdate, when present, wins so the age cannot silently go stale.
+    """
+    _ensure_column(conn, "user_profiles", "birthdate", "DATE")
+    _ensure_column(conn, "user_profiles", "resting_metabolic_rate", "REAL")
+    _ensure_column(conn, "user_profiles", "rmr_measured_at", "DATE")
+    _ensure_column(conn, "user_profiles", "rmr_source", "TEXT")
+    # Record which resting component produced a persisted baseline.
+    _ensure_column(conn, "tdee_estimates", "baseline_source", "TEXT")
+
+
 Migration = tuple[int, str, Callable[[sqlite3.Connection], None]]
 
 MIGRATIONS: tuple[Migration, ...] = (
     (1, "add diet columns to user_profiles", _migration_1_diet_columns),
     (2, "create tracking v2 tables and estimate metadata", _migration_2_tracking_v2),
     (3, "backfill legacy calorie rows as unclassified intake", _migration_3_legacy_calories),
+    (4, "add birthdate and measured RMR to user_profiles", _migration_4_birthdate_and_rmr),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]

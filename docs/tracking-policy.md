@@ -52,6 +52,20 @@ number of calendar days in the interval. This makes seven complete days in a
   otherwise the profile weight is the documented fallback. A backfilled old
   measurement never overwrites the profile.
 
+## Age and baseline provenance
+
+- A birthdate, when recorded, is authoritative: the age used in energy formulas
+  is derived on the analysis date, so it changes on the birthday without any
+  profile edit. The stored `age` remains for profiles that only know an age and
+  is treated as current, not dated.
+- A recorded measured RMR replaces the Mifflin-St Jeor resting component. The
+  activity multiplier still applies, because a measured RMR says nothing about
+  movement. Every estimate reports `baseline_source`
+  (`mifflin` or `measured_rmr`) and `resting_kcal`.
+- A measured RMR narrows baseline uncertainty: formula-only estimates use
+  ±(1.96 × 200) kcal/day instead of ±(1.96 × 250) kcal/day. This is not a claim
+  that the TDEE is known to ±200; activity-multiplier error remains.
+
 ## Evidence gates for a learned estimate
 
 An adaptive estimate requires all of the following:

@@ -7,10 +7,12 @@ from datetime import date, timedelta
 import pytest
 
 from llmn.db.connection import DatabaseConnection
+from llmn.tracking import policy
 from llmn.tracking.diagnostics import calculate_mifflin_tdee
 from llmn.tracking.ema import update_trend
 from llmn.tracking.errors import GoalValidationError
 from llmn.tracking.estimation import AnalysisWindow, summarize_intake
+from llmn.tracking.formula import BASELINE_MEASURED_RMR, baseline_expenditure
 from llmn.tracking.models import GoalPeriod, IntakeEntry, UserProfile
 from llmn.tracking.queries import (
     GoalQueries,
@@ -462,3 +464,88 @@ class TestRecommendationPolicy:
         assert analysis.recommendation.assessment == "no_goal"
         assert analysis.recommendation.action == "set_goal"
         assert "NO_GOAL_SET" in analysis.reason_codes
+
+
+class TestBirthdateAndMeasuredRMR:
+    def test_age_is_derived_from_birthdate(self) -> None:
+        profile = UserProfile(
+            user_id=1,
+            age=44,
+            sex="male",
+            height_inches=73,
+            weight_lbs=176.9,
+            activity_level="moderate",
+            birthdate=date(1981, 11, 1),
+        )
+        assert profile.age_on(date(2026, 10, 31)) == 44
+        assert profile.age_on(date(2026, 11, 1)) == 45
+        assert profile.age_on(date(2027, 10, 31)) == 45
+        assert profile.age_on(date(2027, 11, 1)) == 46
+
+    def test_stored_age_is_used_when_birthdate_is_unknown(self) -> None:
+        profile = UserProfile(
+            user_id=1,
+            age=38,
+            sex="female",
+            height_inches=65,
+            weight_lbs=140,
+            activity_level="lightly_active",
+        )
+        assert profile.age_on(date(2026, 1, 1)) == 38
+
+    def test_measured_rmr_replaces_mifflin_resting_component(
+        self, temp_db: DatabaseConnection
+    ) -> None:
+        with temp_db.get_connection() as conn:
+            profile = UserProfile(
+                user_id=None,
+                age=44,
+                sex="male",
+                height_inches=73,
+                weight_lbs=176.9,
+                activity_level="moderate",
+                resting_metabolic_rate=1850.0,
+                rmr_measured_at=date(2026, 9, 17),
+                rmr_source="dexa",
+            )
+            user_id = UserQueries.create_user(conn, profile)
+            stored = UserQueries.get_user(conn, user_id)
+        assert stored is not None
+        assert stored.has_measured_rmr
+        assert stored.resting_metabolic_rate == pytest.approx(1850.0)
+
+        baseline = baseline_expenditure(stored, 176.9, "moderate", date(2026, 10, 24))
+        assert baseline.source == BASELINE_MEASURED_RMR
+        assert baseline.resting_source == "measured_rmr"
+        assert baseline.resting_kcal == pytest.approx(1850.0)
+        assert baseline.kcal_per_day == pytest.approx(1850.0 * 1.55, abs=0.5)
+
+    def test_measured_rmr_is_used_by_the_estimate(self, temp_db: DatabaseConnection) -> None:
+        with temp_db.get_connection() as conn:
+            user_id = make_user(conn)
+            profile = UserQueries.get_user(conn, user_id)
+            assert profile is not None
+            profile.resting_metabolic_rate = 1850.0
+            profile.rmr_measured_at = date(2026, 9, 17)
+            profile.rmr_source = "dexa"
+            UserQueries.update_user(conn, profile)
+            analysis = analyze(conn, user_id, date(2026, 1, 20), 14)
+
+        estimate = analysis.estimate
+        assert estimate.method == "formula_only"
+        assert estimate.baseline_source == "measured_rmr"
+        assert estimate.resting_kcal == pytest.approx(1850.0)
+        assert estimate.baseline_kcal == pytest.approx(1850.0 * 1.55, abs=0.5)
+        assert estimate.uncertainty_95ci == pytest.approx(policy.MEASURED_RMR_UNCERTAINTY_95CI)
+
+    def test_invalid_measured_rmr_is_rejected(self) -> None:
+        with pytest.raises(ValueError):
+            UserProfile(
+                user_id=None,
+                age=44,
+                sex="male",
+                height_inches=73,
+                weight_lbs=176.9,
+                activity_level="moderate",
+                resting_metabolic_rate=-10.0,
+            )

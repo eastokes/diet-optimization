@@ -22,9 +22,19 @@ def test_fresh_schema_records_all_versions(temp_db: DatabaseConnection) -> None:
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
+        profile_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(user_profiles)").fetchall()
+        }
+        estimate_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(tdee_estimates)").fetchall()
+        }
 
-    assert versions == [1, 2, 3]
+    assert versions == [1, 2, 3, 4]
     assert {"intake_log", "goal_periods", "activity_periods"} <= tables
+    assert {"birthdate", "resting_metabolic_rate", "rmr_measured_at", "rmr_source"} <= (
+        profile_columns
+    )
+    assert "baseline_source" in estimate_columns
 
 
 def test_repeated_migration_is_noop(temp_db: DatabaseConnection) -> None:

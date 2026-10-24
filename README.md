@@ -396,7 +396,7 @@ All commands should be prefixed with `uv run` when using `uv` as the project man
 | `llmn profile wizard` | Interactive profile creator |
 | `llmn profile list` | List saved profiles |
 | `llmn profile show` | Show profile details |
-| `llmn user create` | Create user profile (age, sex, height, activity level) |
+| `llmn user create` | Create user profile (birthdate or age, sex, height, activity) |
 | `llmn user show` | Show current user profile |
 | `llmn weight add <lbs>` | Log today's weight (gap-aware EMA trend) |
 | `llmn weight list` | Show weight history for a calendar interval |
@@ -411,6 +411,7 @@ All commands should be prefixed with `uv run` when using `uv` as the project man
 | `llmn tdee estimate` | Persist a calendar-aware expenditure estimate |
 | `llmn tdee targets` | Get a bounded recommendation or explicit hold |
 | `llmn tdee progress` | Show progress plus the shared analysis |
+| `llmn user update --rmr` | Record a measured RMR that replaces the Mifflin baseline |
 
 ## Advanced LLM Features
 

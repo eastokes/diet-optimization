@@ -94,6 +94,10 @@ CREATE INDEX IF NOT EXISTS idx_optimization_runs_date ON optimization_runs(creat
 CREATE TABLE IF NOT EXISTS user_profiles (
     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
     age INTEGER,
+    birthdate DATE,
+    resting_metabolic_rate REAL,
+    rmr_measured_at DATE,
+    rmr_source TEXT,
     sex TEXT CHECK(sex IN ('male', 'female')),
     height_inches REAL,
     weight_lbs REAL,
@@ -146,6 +150,7 @@ CREATE TABLE IF NOT EXISTS tdee_estimates (
     user_id INTEGER NOT NULL,
     estimated_at DATE NOT NULL,
     mifflin_tdee REAL NOT NULL,
+    baseline_source TEXT,
     tdee_bias REAL NOT NULL DEFAULT 0.0,
     variance REAL NOT NULL DEFAULT 10000.0,
     adjusted_tdee REAL NOT NULL,

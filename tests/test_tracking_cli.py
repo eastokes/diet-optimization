@@ -544,8 +544,8 @@ class TestProgressReportConsistency:
         )
         # The progress report must quote the same expenditure estimate that the
         # shared analysis (and therefore tdee targets) uses.
-        assert data["tdee"]["mifflin_tdee"] == pytest.approx(
-            analysis["expenditure"]["mifflin_tdee"], abs=0.5
+        assert data["tdee"]["baseline_kcal"] == pytest.approx(
+            analysis["expenditure"]["baseline_kcal"], abs=0.5
         )
         assert data["tdee"]["adjusted_tdee"] == pytest.approx(
             analysis["expenditure"]["kcal_per_day"], abs=0.5
@@ -580,3 +580,131 @@ class TestProgressReportConsistency:
         assert "least-squares over raw weights" in result.stdout
         assert f"{start.isoformat()} to {as_of.isoformat()}" in result.stdout
         assert "Coverage:" in result.stdout
+
+
+class TestProfileBirthdateAndMeasuredRMR:
+    def test_birthdate_create_and_show(self, cli_db: DatabaseConnection) -> None:
+        birth = date(date.today().year - 44, 1, 1)
+        payload = run_json(
+            [
+                "user",
+                "create",
+                "--birthdate",
+                birth.isoformat(),
+                "--sex",
+                "male",
+                "--height",
+                "73",
+                "--weight",
+                "176.9",
+                "--activity",
+                "moderate",
+                "--json",
+            ]
+        )
+        profile = payload["data"]["profile"]
+        assert profile["birthdate"] == birth.isoformat()
+        assert profile["age"] == 44
+        assert profile["age_source"] == "birthdate"
+        assert profile["baseline_source"] == "mifflin"
+
+        shown = run_json(["user", "show", "--json"])
+        assert shown["data"]["birthdate"] == birth.isoformat()
+        assert shown["data"]["age"] == 44
+        assert shown["data"]["age_source"] == "birthdate"
+
+    def test_missing_age_and_birthdate_is_structured(self, cli_db: DatabaseConnection) -> None:
+        payload = run_json(
+            [
+                "user",
+                "create",
+                "--sex",
+                "male",
+                "--height",
+                "73",
+                "--weight",
+                "176.9",
+                "--json",
+            ],
+            expected_exit=1,
+        )
+        assert payload["success"] is False
+        assert "MISSING_AGE" in payload["error_codes"]
+
+    def test_invalid_birthdate_is_rejected(self, cli_db: DatabaseConnection) -> None:
+        payload = run_json(
+            [
+                "user",
+                "create",
+                "--birthdate",
+                (date.today() + timedelta(days=1)).isoformat(),
+                "--sex",
+                "male",
+                "--height",
+                "73",
+                "--weight",
+                "176.9",
+                "--json",
+            ],
+            expected_exit=1,
+        )
+        assert "INVALID_BIRTHDATE" in payload["error_codes"]
+
+    def test_measured_rmr_changes_the_baseline_and_can_be_cleared(
+        self, cli_db: DatabaseConnection
+    ) -> None:
+        create_user()
+        measured_on = (date.today() - timedelta(days=1)).isoformat()
+        update = run_json(
+            [
+                "user",
+                "update",
+                "--rmr",
+                "1850",
+                "--rmr-date",
+                measured_on,
+                "--rmr-source",
+                "dexa",
+                "--json",
+            ]
+        )
+        assert update["data"]["resting_metabolic_rate"] == pytest.approx(1850.0)
+        assert update["data"]["rmr_source"] == "dexa"
+        assert update["data"]["rmr_measured_at"] == measured_on
+        assert update["data"]["baseline_source"] == "measured_rmr"
+
+        estimate = run_json(["tdee", "estimate", "--json"])
+        expenditure = estimate["data"]["expenditure"]
+        assert expenditure["baseline_source"] == "measured_rmr"
+        assert expenditure["resting_kcal"] == pytest.approx(1850.0)
+        # test profile uses the default moderate activity multiplier (1.55)
+        assert expenditure["baseline_kcal"] == pytest.approx(1850.0 * 1.55, abs=0.5)
+        assert expenditure["uncertainty_95ci"] == pytest.approx(392.0, abs=0.5)
+
+        cleared = run_json(["user", "update", "--clear-rmr", "--json"])
+        assert cleared["data"]["resting_metabolic_rate"] is None
+        assert cleared["data"]["baseline_source"] == "mifflin"
+
+    def test_invalid_rmr_source_is_rejected(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        payload = run_json(
+            [
+                "user",
+                "update",
+                "--rmr",
+                "1850",
+                "--rmr-source",
+                "vibes",
+                "--json",
+            ],
+            expected_exit=1,
+        )
+        assert "INVALID_RMR_SOURCE" in payload["error_codes"]
+
+    def test_rmr_source_without_rmr_is_rejected(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        payload = run_json(
+            ["user", "update", "--rmr-source", "dexa", "--json"],
+            expected_exit=1,
+        )
+        assert "MISSING_RMR" in payload["error_codes"]

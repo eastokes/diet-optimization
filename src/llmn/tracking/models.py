@@ -15,11 +15,21 @@ VALID_COMPLETENESS = ("complete", "partial", "unknown")
 VALID_QUALITY = ("measured", "estimated", "unknown")
 VALID_GOAL_MODES = ("loss", "maintenance", "gain")
 VALID_ACTIVITY_LEVELS = ("sedentary", "lightly_active", "moderate", "active", "very_active")
+VALID_RMR_SOURCES = ("dexa", "indirect_calorimetry", "estimate", "other")
 
 
 @dataclass
 class UserProfile:
-    """User profile for weight tracking and TDEE calculations."""
+    """User profile for weight tracking and TDEE calculations.
+
+    ``birthdate`` is preferred over ``age``: the age used in energy formulas is
+    derived from it on the analysis date, so it cannot go stale. ``age`` remains
+    for profiles that only record an age.
+
+    ``resting_metabolic_rate`` is an optional measured RMR (for example from a
+    DEXA report). When present it replaces the Mifflin-St Jeor BMR as the
+    baseline that the activity multiplier is applied to.
+    """
 
     user_id: int | None
     age: int
@@ -31,7 +41,30 @@ class UserProfile:
     target_weight_lbs: float | None = None
     diet_type: str | None = None  # 'omnivore', 'pescatarian', 'vegetarian', 'vegan'
     diet_style: str | None = None  # 'standard', 'slow_carb', 'low_carb', etc.
+    birthdate: date | None = None
+    resting_metabolic_rate: float | None = None
+    rmr_measured_at: date | None = None
+    rmr_source: str | None = None
     created_at: datetime | None = None
+
+    def age_on(self, on_date: date | None = None) -> int:
+        """Return the age that applies on a date.
+
+        Uses the birthdate when available and falls back to the stored age,
+        which is then treated as current rather than dated.
+        """
+        if self.birthdate is None:
+            return self.age
+        reference = on_date or date.today()
+        return (
+            reference.year
+            - self.birthdate.year
+            - ((reference.month, reference.day) < (self.birthdate.month, self.birthdate.day))
+        )
+
+    @property
+    def has_measured_rmr(self) -> bool:
+        return self.resting_metabolic_rate is not None and self.resting_metabolic_rate > 0
 
     def __post_init__(self) -> None:
         if self.sex not in ("male", "female"):
@@ -53,6 +86,12 @@ class UserProfile:
             raise ValueError(
                 f"diet_style must be one of {VALID_DIET_STYLES}, got '{self.diet_style}'"
             )
+        if self.resting_metabolic_rate is not None and (
+            not math.isfinite(self.resting_metabolic_rate) or self.resting_metabolic_rate <= 0
+        ):
+            raise ValueError("resting_metabolic_rate must be a finite, positive number")
+        if self.birthdate is not None and self.birthdate > date.today():
+            raise ValueError("birthdate cannot be in the future")
 
 
 @dataclass
@@ -222,6 +261,7 @@ class TDEEEstimate:
     tdee_bias: float
     variance: float
     adjusted_tdee: float
+    baseline_source: str | None = None
     method: str | None = None
     policy_version: str | None = None
     interval_start: date | None = None

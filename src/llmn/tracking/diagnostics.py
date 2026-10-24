@@ -45,7 +45,9 @@ class TDEEReport:
     """Expenditure report derived from the shared analysis."""
 
     method: str
-    mifflin_tdee: float  # baseline at the calculation weight/activity
+    baseline_kcal: float  # Mifflin-St Jeor or measured RMR x activity
+    baseline_source: str  # mifflin | measured_rmr
+    resting_kcal: float
     tdee_bias: float | None
     adjusted_tdee: float | None
     uncertainty_95ci: float | None
@@ -145,7 +147,7 @@ def build_tdee_report(analysis: TrackingAnalysis) -> TDEEReport:
     expected_deficit = None
     if mean_intake is not None:
         expenditure = (
-            estimate.kcal_per_day if estimate.kcal_per_day is not None else estimate.mifflin_tdee
+            estimate.kcal_per_day if estimate.kcal_per_day is not None else estimate.baseline_kcal
         )
         expected_deficit = expenditure - mean_intake
 
@@ -156,7 +158,9 @@ def build_tdee_report(analysis: TrackingAnalysis) -> TDEEReport:
 
     return TDEEReport(
         method=estimate.method,
-        mifflin_tdee=estimate.mifflin_tdee,
+        baseline_kcal=estimate.baseline_kcal,
+        baseline_source=estimate.baseline_source,
+        resting_kcal=estimate.resting_kcal,
         tdee_bias=estimate.bias,
         adjusted_tdee=estimate.kcal_per_day,
         uncertainty_95ci=estimate.uncertainty_95ci,
@@ -308,14 +312,20 @@ def format_weight_report(report: WeightReport) -> str:
     return "\n".join(lines)
 
 
+def _baseline_label(report: TDEEReport) -> str:
+    if report.baseline_source == "measured_rmr":
+        return f"measured RMR {report.resting_kcal:.0f}"
+    return f"Mifflin-St Jeor {report.resting_kcal:.0f}"
+
+
 def format_tdee_report(report: TDEEReport) -> str:
     """Format the expenditure section as text."""
     lines = [
         "",
         f"Energy expenditure ({report.method})",
         "=" * 55,
-        f"Baseline:        {report.mifflin_tdee:.0f} kcal/day "
-        f"(Mifflin-St Jeor at {report.calculation_weight_lbs:.1f} lbs, "
+        f"Baseline:        {report.baseline_kcal:.0f} kcal/day "
+        f"({_baseline_label(report)} at {report.calculation_weight_lbs:.1f} lbs, "
         f"{report.activity_level})",
     ]
     if report.tdee_bias is not None:

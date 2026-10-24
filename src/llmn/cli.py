@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import math
+from datetime import date
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -3342,9 +3344,102 @@ def patterns_info(
 # ============================================================================
 
 
+def _parse_birthdate(value: str | None) -> date | None:
+    """Parse and validate a birthdate, returning None when omitted."""
+    from llmn.tracking.errors import TrackingError
+
+    if not value:
+        return None
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as exc:
+        raise TrackingError(
+            "INVALID_BIRTHDATE",
+            f"--birthdate must be YYYY-MM-DD, got '{value}'.",
+        ) from exc
+    if parsed > date.today():
+        raise TrackingError("INVALID_BIRTHDATE", "A birthdate cannot be in the future.")
+    years = (
+        date.today().year
+        - parsed.year
+        - ((date.today().month, date.today().day) < (parsed.month, parsed.day))
+    )
+    if years < 13 or years > 120:
+        raise TrackingError(
+            "INVALID_BIRTHDATE",
+            f"A birthdate of {parsed} implies an age of {years}, outside 13-120.",
+        )
+    return parsed
+
+
+def _parse_rmr_args(
+    rmr: float | None,
+    rmr_date: str | None,
+    rmr_source: str | None,
+) -> tuple[float | None, date | None, str | None]:
+    """Validate optional measured-RMR arguments."""
+    from llmn.tracking.errors import TrackingError
+    from llmn.tracking.models import VALID_RMR_SOURCES
+
+    if rmr is None:
+        if rmr_date or rmr_source:
+            raise TrackingError(
+                "MISSING_RMR",
+                "--rmr-date/--rmr-source require --rmr.",
+            )
+        return None, None, None
+    if not math.isfinite(rmr) or rmr <= 0:
+        raise TrackingError("INVALID_RMR", "RMR must be a finite, positive kcal/day value.")
+    measured_at = None
+    if rmr_date:
+        try:
+            measured_at = date.fromisoformat(rmr_date)
+        except ValueError as exc:
+            raise TrackingError(
+                "INVALID_DATE",
+                f"--rmr-date must be YYYY-MM-DD, got '{rmr_date}'.",
+            ) from exc
+        if measured_at > date.today():
+            raise TrackingError("FUTURE_DATE", "--rmr-date cannot be in the future.")
+    if rmr_source is not None and rmr_source not in VALID_RMR_SOURCES:
+        raise TrackingError(
+            "INVALID_RMR_SOURCE",
+            f"--rmr-source must be one of {', '.join(VALID_RMR_SOURCES)}.",
+        )
+    return rmr, measured_at, rmr_source
+
+
+def _profile_payload(profile: Any) -> dict[str, Any]:
+    """Serialize a profile, including derived age and baseline provenance."""
+    return {
+        "user_id": profile.user_id,
+        "age": profile.age_on(),
+        "stored_age": profile.age,
+        "birthdate": profile.birthdate.isoformat() if profile.birthdate else None,
+        "age_source": "birthdate" if profile.birthdate else "stored_age",
+        "sex": profile.sex,
+        "height_inches": profile.height_inches,
+        "weight_lbs": profile.weight_lbs,
+        "activity_level": profile.activity_level,
+        "goal": profile.goal,
+        "target_weight_lbs": profile.target_weight_lbs,
+        "diet_type": profile.diet_type,
+        "diet_style": profile.diet_style,
+        "resting_metabolic_rate": profile.resting_metabolic_rate,
+        "rmr_measured_at": (
+            profile.rmr_measured_at.isoformat() if profile.rmr_measured_at else None
+        ),
+        "rmr_source": profile.rmr_source,
+        "baseline_source": "measured_rmr" if profile.has_measured_rmr else "mifflin",
+    }
+
+
 @user_app.command("create")
 def user_create(
-    age: int = typer.Option(..., "--age", help="Age in years"),
+    age: int | None = typer.Option(None, "--age", help="Age in years (or use --birthdate)"),
+    birthdate: str | None = typer.Option(
+        None, "--birthdate", help="Birthdate (YYYY-MM-DD); keeps the age from going stale"
+    ),
     sex: str = typer.Option(..., "--sex", help="Sex (male/female)"),
     height: float = typer.Option(..., "--height", help="Height in inches"),
     weight: float = typer.Option(..., "--weight", help="Current weight in lbs"),
@@ -3354,13 +3449,47 @@ def user_create(
         help="Activity level (sedentary/lightly_active/moderate/active/very_active)",
     ),
     goal: str | None = typer.Option(None, "--goal", help="Goal (e.g., 'fat_loss:185:165')"),
+    rmr: float | None = typer.Option(
+        None, "--rmr", help="Measured resting metabolic rate in kcal/day (e.g. from DEXA)"
+    ),
+    rmr_date: str | None = typer.Option(None, "--rmr-date", help="Date the RMR was measured"),
+    rmr_source: str | None = typer.Option(
+        None, "--rmr-source", help="dexa, indirect_calorimetry, estimate, or other"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Create a user profile for weight tracking."""
+    from llmn.tracking.errors import TrackingError
     from llmn.tracking.models import UserProfile
     from llmn.tracking.queries import UserQueries
 
-    db = get_db()
+    command = "user create"
+    try:
+        parsed_birthdate = _parse_birthdate(birthdate)
+        resolved_age = age
+        if parsed_birthdate is not None:
+            resolved_age = (
+                date.today().year
+                - parsed_birthdate.year
+                - (
+                    (date.today().month, date.today().day)
+                    < (parsed_birthdate.month, parsed_birthdate.day)
+                )
+            )
+        if resolved_age is None:
+            raise TrackingError(
+                "MISSING_AGE",
+                "Provide --birthdate (preferred) or --age.",
+                ["llmn user create --birthdate 1981-11-01 --sex male --height 73 --weight 177"],
+            )
+        if resolved_age < 13 or resolved_age > 120:
+            raise TrackingError("INVALID_AGE", "Age must be between 13 and 120.")
+        resolved_rmr, rmr_measured_at, resolved_rmr_source = _parse_rmr_args(
+            rmr, rmr_date, rmr_source
+        )
+    except TrackingError as error:
+        tracking_failure(command, error, json_output)
+        return
 
     # Parse goal if provided
     target_weight = None
@@ -3372,42 +3501,53 @@ def user_create(
             except ValueError:
                 pass
 
-    profile = UserProfile(
-        user_id=None,
-        age=age,
-        sex=sex,
-        height_inches=height,
-        weight_lbs=weight,
-        activity_level=activity,
-        goal=goal,
-        target_weight_lbs=target_weight,
-    )
+    try:
+        profile = UserProfile(
+            user_id=None,
+            age=resolved_age,
+            sex=sex,
+            height_inches=height,
+            weight_lbs=weight,
+            activity_level=activity,
+            goal=goal,
+            target_weight_lbs=target_weight,
+            birthdate=parsed_birthdate,
+            resting_metabolic_rate=resolved_rmr,
+            rmr_measured_at=rmr_measured_at,
+            rmr_source=resolved_rmr_source,
+        )
+    except ValueError as error:
+        tracking_failure(command, TrackingError("INVALID_PROFILE", str(error)), json_output)
+        return
 
+    db = get_db()
     with db.get_connection() as conn:
         user_id = UserQueries.create_user(conn, profile)
 
+    data = _profile_payload(profile)
+    data["user_id"] = user_id
     if json_output:
         output_json(
             {
                 "success": True,
-                "command": "user create",
-                "data": {
-                    "user_id": user_id,
-                    "profile": {
-                        "age": age,
-                        "sex": sex,
-                        "height_inches": height,
-                        "weight_lbs": weight,
-                        "activity_level": activity,
-                        "goal": goal,
-                        "target_weight_lbs": target_weight,
-                    },
-                },
+                "command": command,
+                "data": {"user_id": user_id, "profile": data},
                 "human_summary": f"Created user profile (ID: {user_id})",
             }
         )
-    else:
-        console.print(f"[green]Created user profile (ID: {user_id})[/green]")
+        return
+
+    console.print(f"[green]Created user profile (ID: {user_id})[/green]")
+    console.print(f"  Age: {data['age']} ({data['age_source']})")
+    if data["birthdate"]:
+        console.print(f"  Birthdate: {data['birthdate']}")
+    console.print(f"  Baseline: {data['baseline_source']}")
+    if data["resting_metabolic_rate"]:
+        console.print(
+            f"  Measured RMR: {data['resting_metabolic_rate']:.0f} kcal/day "
+            f"({data['rmr_source'] or 'unspecified source'}, "
+            f"{data['rmr_measured_at'] or 'undated'})"
+        )
 
 
 @user_app.command("show")
@@ -3433,56 +3573,57 @@ def user_show(
                     "command": "user show",
                     "errors": ["No user profile found"],
                     "suggestions": [
-                        "Create a profile with: llmn user create --age 35 "
-                        "--sex male --height 70 --weight 180"
+                        "Create a profile with: llmn user create --birthdate 1981-11-01 "
+                        "--sex male --height 73 --weight 177"
                     ],
                 }
             )
         else:
             console.print("[red]No user profile found[/red]")
             console.print(
-                "Create one with: llmn user create --age 35 --sex male --height 70 --weight 180"
+                "Create one with: llmn user create --birthdate 1981-11-01 "
+                "--sex male --height 73 --weight 177"
             )
         raise typer.Exit(1)
 
+    data = _profile_payload(profile)
     if json_output:
         output_json(
             {
                 "success": True,
                 "command": "user show",
-                "data": {
-                    "user_id": profile.user_id,
-                    "age": profile.age,
-                    "sex": profile.sex,
-                    "height_inches": profile.height_inches,
-                    "weight_lbs": profile.weight_lbs,
-                    "activity_level": profile.activity_level,
-                    "goal": profile.goal,
-                    "target_weight_lbs": profile.target_weight_lbs,
-                    "diet_type": profile.diet_type,
-                    "diet_style": profile.diet_style,
-                },
+                "data": data,
                 "human_summary": (
-                    f"User {profile.user_id}: {profile.sex}, {profile.age}y, "
-                    f"{profile.height_inches}in, {profile.weight_lbs}lbs"
+                    f"User {data['user_id']}: {data['sex']}, {data['age']}y, "
+                    f"{data['height_inches']}in, {data['weight_lbs']}lbs"
                 ),
             }
         )
-    else:
-        console.print(f"[bold]User Profile (ID: {profile.user_id})[/bold]")
-        console.print(f"  Age: {profile.age}")
-        console.print(f"  Sex: {profile.sex}")
-        console.print(f"  Height: {profile.height_inches} inches")
-        console.print(f"  Weight: {profile.weight_lbs} lbs")
-        console.print(f"  Activity: {profile.activity_level}")
-        if profile.goal:
-            console.print(f"  Goal: {profile.goal}")
-        if profile.target_weight_lbs:
-            console.print(f"  Target weight: {profile.target_weight_lbs} lbs")
-        if profile.diet_type:
-            console.print(f"  Diet type: {profile.diet_type}")
-        if profile.diet_style:
-            console.print(f"  Diet style: {profile.diet_style}")
+        return
+
+    console.print(f"[bold]User Profile (ID: {data['user_id']})[/bold]")
+    console.print(f"  Age: {data['age']} ({data['age_source']})")
+    if data["birthdate"]:
+        console.print(f"  Birthdate: {data['birthdate']}")
+    console.print(f"  Sex: {data['sex']}")
+    console.print(f"  Height: {data['height_inches']} inches")
+    console.print(f"  Weight: {data['weight_lbs']} lbs")
+    console.print(f"  Activity: {data['activity_level']}")
+    console.print(f"  Energy baseline: {data['baseline_source']}")
+    if data["resting_metabolic_rate"]:
+        console.print(
+            f"  Measured RMR: {data['resting_metabolic_rate']:.0f} kcal/day "
+            f"({data['rmr_source'] or 'unspecified source'}, "
+            f"{data['rmr_measured_at'] or 'undated'})"
+        )
+    if data["goal"]:
+        console.print(f"  Goal: {data['goal']}")
+    if data["target_weight_lbs"]:
+        console.print(f"  Target weight: {data['target_weight_lbs']} lbs")
+    if data["diet_type"]:
+        console.print(f"  Diet type: {data['diet_type']}")
+    if data["diet_style"]:
+        console.print(f"  Diet style: {data['diet_style']}")
 
 
 @user_app.command("update")
@@ -3491,6 +3632,19 @@ def user_update(
     weight: float | None = typer.Option(None, "--weight", help="Update current weight"),
     goal: str | None = typer.Option(None, "--goal", help="Update goal"),
     activity: str | None = typer.Option(None, "--activity", help="Update activity level"),
+    birthdate: str | None = typer.Option(
+        None, "--birthdate", help="Birthdate (YYYY-MM-DD), overriding the stored age"
+    ),
+    rmr: float | None = typer.Option(
+        None, "--rmr", help="Measured resting metabolic rate in kcal/day"
+    ),
+    rmr_date: str | None = typer.Option(None, "--rmr-date", help="Date the RMR was measured"),
+    rmr_source: str | None = typer.Option(
+        None, "--rmr-source", help="dexa, indirect_calorimetry, estimate, or other"
+    ),
+    clear_rmr: bool = typer.Option(
+        False, "--clear-rmr", help="Remove the measured RMR and revert to Mifflin-St Jeor"
+    ),
     diet_type: str | None = typer.Option(
         None, "--diet-type", help="Diet type (omnivore/pescatarian/vegetarian/vegan)"
     ),
@@ -3502,39 +3656,50 @@ def user_update(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update user profile."""
+    from llmn.tracking.errors import TrackingError
     from llmn.tracking.models import VALID_DIET_STYLES, VALID_DIET_TYPES
     from llmn.tracking.queries import UserQueries
 
+    command = "user update"
+
     # Validate diet_type and diet_style before querying database
     if diet_type is not None and diet_type not in VALID_DIET_TYPES:
-        if json_output:
-            output_json(
-                {
-                    "success": False,
-                    "command": "user update",
-                    "errors": [f"Invalid diet type: {diet_type}"],
-                    "suggestions": [f"Valid options: {', '.join(VALID_DIET_TYPES)}"],
-                }
-            )
-        else:
-            console.print(f"[red]Invalid diet type: {diet_type}[/red]")
-            console.print(f"Valid options: {', '.join(VALID_DIET_TYPES)}")
-        raise typer.Exit(1)
+        tracking_failure(
+            command,
+            TrackingError(
+                "INVALID_DIET_TYPE",
+                f"Invalid diet type: {diet_type}",
+                [f"Valid options: {', '.join(VALID_DIET_TYPES)}"],
+            ),
+            json_output,
+        )
+        return
 
     if diet_style is not None and diet_style not in VALID_DIET_STYLES:
-        if json_output:
-            output_json(
-                {
-                    "success": False,
-                    "command": "user update",
-                    "errors": [f"Invalid diet style: {diet_style}"],
-                    "suggestions": [f"Valid options: {', '.join(VALID_DIET_STYLES)}"],
-                }
+        tracking_failure(
+            command,
+            TrackingError(
+                "INVALID_DIET_STYLE",
+                f"Invalid diet style: {diet_style}",
+                [f"Valid options: {', '.join(VALID_DIET_STYLES)}"],
+            ),
+            json_output,
+        )
+        return
+
+    try:
+        parsed_birthdate = _parse_birthdate(birthdate)
+        if clear_rmr and (rmr is not None or rmr_date is not None or rmr_source is not None):
+            raise TrackingError(
+                "CONFLICTING_RMR",
+                "--clear-rmr cannot be combined with --rmr/--rmr-date/--rmr-source.",
             )
-        else:
-            console.print(f"[red]Invalid diet style: {diet_style}[/red]")
-            console.print(f"Valid options: {', '.join(VALID_DIET_STYLES)}")
-        raise typer.Exit(1)
+        resolved_rmr, rmr_measured_at, resolved_rmr_source = _parse_rmr_args(
+            rmr, rmr_date, rmr_source
+        )
+    except TrackingError as error:
+        tracking_failure(command, error, json_output)
+        return
 
     db = get_db()
     with db.get_connection() as conn:
@@ -3544,17 +3709,12 @@ def user_update(
             profile = UserQueries.get_default_user(conn)
 
         if profile is None:
-            if json_output:
-                output_json(
-                    {
-                        "success": False,
-                        "command": "user update",
-                        "errors": ["No user profile found"],
-                    }
-                )
-            else:
-                console.print("[red]No user profile found[/red]")
-            raise typer.Exit(1)
+            tracking_failure(
+                command,
+                TrackingError("NO_USER_PROFILE", "No user profile found."),
+                json_output,
+            )
+            return
 
         # Update fields
         if weight is not None:
@@ -3575,23 +3735,43 @@ def user_update(
             profile.diet_type = diet_type
         if diet_style is not None:
             profile.diet_style = diet_style
+        if parsed_birthdate is not None:
+            profile.birthdate = parsed_birthdate
+            profile.age = profile.age_on(date.today())
+        if clear_rmr:
+            profile.resting_metabolic_rate = None
+            profile.rmr_measured_at = None
+            profile.rmr_source = None
+        elif resolved_rmr is not None:
+            profile.resting_metabolic_rate = resolved_rmr
+            profile.rmr_measured_at = rmr_measured_at
+            profile.rmr_source = resolved_rmr_source
 
         UserQueries.update_user(conn, profile)
 
+    data = _profile_payload(profile)
     if json_output:
         output_json(
             {
                 "success": True,
-                "command": "user update",
-                "data": {"user_id": profile.user_id},
+                "command": command,
+                "data": data,
                 "human_summary": "Profile updated",
             }
         )
-    else:
-        console.print("[green]Profile updated[/green]")
+        return
+
+    console.print("[green]Profile updated[/green]")
+    console.print(f"  Age: {data['age']} ({data['age_source']})")
+    console.print(f"  Energy baseline: {data['baseline_source']}")
+    if data["resting_metabolic_rate"]:
+        console.print(
+            f"  Measured RMR: {data['resting_metabolic_rate']:.0f} kcal/day "
+            f"({data['rmr_source'] or 'unspecified source'}, "
+            f"{data['rmr_measured_at'] or 'undated'})"
+        )
 
 
-# ============================================================================
 # Weight Tracking Commands
 # ============================================================================
 
@@ -4097,9 +4277,14 @@ def tdee_estimate(
             f"({analysis.window.total_days} calendar days)"
         )
         console.print(f"  Method: {estimate.method}")
+        baseline_label = (
+            f"measured RMR {estimate.resting_kcal:.0f}"
+            if estimate.baseline_source == "measured_rmr"
+            else f"Mifflin-St Jeor {estimate.resting_kcal:.0f}"
+        )
         console.print(
-            f"  Mifflin-St Jeor baseline: {estimate.mifflin_tdee:.0f} kcal/day "
-            f"(at {estimate.calculation_weight_lbs:.1f} lbs, "
+            f"  Baseline: {estimate.baseline_kcal:.0f} kcal/day "
+            f"({baseline_label} at {estimate.calculation_weight_lbs:.1f} lbs, "
             f"{estimate.activity_level})"
         )
         if estimate.bias is not None:
@@ -4332,7 +4517,9 @@ def tdee_progress(
                     },
                     "tdee": {
                         "method": report.tdee.method,
-                        "mifflin_tdee": report.tdee.mifflin_tdee,
+                        "baseline_kcal": report.tdee.baseline_kcal,
+                        "baseline_source": report.tdee.baseline_source,
+                        "resting_kcal": report.tdee.resting_kcal,
                         "tdee_bias": report.tdee.tdee_bias,
                         "adjusted_tdee": report.tdee.adjusted_tdee,
                         "uncertainty_95ci": report.tdee.uncertainty_95ci,

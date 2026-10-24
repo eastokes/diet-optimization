@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 from llmn.tracking import policy
 from llmn.tracking.ema import calculate_trend_from_scratch
-from llmn.tracking.formula import mifflin_tdee_at_weight
+from llmn.tracking.formula import baseline_expenditure
 from llmn.tracking.models import ActivityPeriod, IntakeEntry, UserProfile, WeightEntry
 from llmn.tracking.tdee_filter import TDEEFilter
 
@@ -145,7 +145,9 @@ class ExpenditureEstimate:
 
     method: str  # learned | formula_only
     kcal_per_day: float | None
-    mifflin_tdee: float
+    baseline_kcal: float
+    baseline_source: str  # mifflin | measured_rmr
+    resting_kcal: float
     bias: float | None
     variance: float | None
     uncertainty_95ci: float | None
@@ -165,7 +167,9 @@ class ExpenditureEstimate:
         return {
             "method": self.method,
             "kcal_per_day": _round(self.kcal_per_day, 0),
-            "mifflin_tdee": _round(self.mifflin_tdee, 0),
+            "baseline_kcal": _round(self.baseline_kcal, 0),
+            "baseline_source": self.baseline_source,
+            "resting_kcal": _round(self.resting_kcal, 0),
             "bias": _round(self.bias, 0),
             "variance": _round(self.variance, 1),
             "uncertainty_95ci": _round(self.uncertainty_95ci, 0),
@@ -375,15 +379,22 @@ def _formula_estimate(
         if "FORMULA_WEIGHT_FALLBACK" not in reasons:
             reasons.append("FORMULA_WEIGHT_FALLBACK")
 
-    mifflin = mifflin_tdee_at_weight(profile, calculation_weight, activity_level)
+    baseline = baseline_expenditure(profile, calculation_weight, activity_level, as_of)
+    baseline_uncertainty = (
+        policy.MEASURED_RMR_UNCERTAINTY_95CI
+        if baseline.source == "measured_rmr"
+        else policy.FORMULA_UNCERTAINTY_95CI
+    )
 
     return ExpenditureEstimate(
         method="formula_only",
-        kcal_per_day=mifflin,
-        mifflin_tdee=mifflin,
+        kcal_per_day=baseline.kcal_per_day,
+        baseline_kcal=baseline.kcal_per_day,
+        baseline_source=baseline.source,
+        resting_kcal=baseline.resting_kcal,
         bias=None,
         variance=None,
-        uncertainty_95ci=policy.FORMULA_UNCERTAINTY_95CI,
+        uncertainty_95ci=baseline_uncertainty,
         segments_used=0,
         window=window,
         intake=intake,
@@ -462,7 +473,7 @@ def estimate_expenditure(
 
     calculate_weight = weights.current_trend or profile.weight_lbs
     current_activity = _resolve_activity_level(activities, fallback_activity, as_of)
-    mifflin_current = mifflin_tdee_at_weight(profile, calculate_weight, current_activity)
+    baseline_current = baseline_expenditure(profile, calculate_weight, current_activity, as_of)
 
     tdee_filter = TDEEFilter()
     segments_used = 0
@@ -492,14 +503,16 @@ def estimate_expenditure(
                         activities, fallback_activity, first.measured_at
                     )
                     trend_start = weights.trend_by_date.get(first.measured_at, first.trend_lbs)
-                    segment_mifflin = mifflin_tdee_at_weight(profile, trend_start, seg_activity)
+                    segment_baseline = baseline_expenditure(
+                        profile, trend_start, seg_activity, first.measured_at
+                    ).kcal_per_day
                     segment_slope = weight_slope_lbs_per_day(segment_weights)
                     if segment_slope is None:
                         segment_start = segment_end + timedelta(days=1)
                         continue
                     # Positive slope means gain; a deficit is the negative.
                     implied_deficit = -segment_slope * 3500.0
-                    expected_deficit = segment_mifflin - segment_intake.mean_kcal
+                    expected_deficit = segment_baseline - segment_intake.mean_kcal
                     tdee_filter.predict_and_update(
                         implied_deficit=implied_deficit,
                         expected_deficit=expected_deficit,
@@ -533,8 +546,11 @@ def estimate_expenditure(
             "Activity level changed during the analysis window; uncertainty was widened."
         )
 
-    adjusted = mifflin_current + tdee_filter.bias
-    if adjusted < 0.5 * mifflin_current or adjusted > 2.0 * mifflin_current:
+    adjusted = baseline_current.kcal_per_day + tdee_filter.bias
+    if (
+        adjusted < 0.5 * baseline_current.kcal_per_day
+        or adjusted > 2.0 * baseline_current.kcal_per_day
+    ):
         reasons.append("IMPLAUSIBLE_ESTIMATE")
         warnings.append(
             "The learned expenditure is implausible relative to the formula baseline; "
@@ -546,7 +562,9 @@ def estimate_expenditure(
     return ExpenditureEstimate(
         method="learned",
         kcal_per_day=adjusted,
-        mifflin_tdee=mifflin_current,
+        baseline_kcal=baseline_current.kcal_per_day,
+        baseline_source=baseline_current.source,
+        resting_kcal=baseline_current.resting_kcal,
         bias=tdee_filter.bias,
         variance=variance,
         uncertainty_95ci=uncertainty,
