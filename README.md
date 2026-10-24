@@ -204,6 +204,37 @@ Example output:
 
 This gives Claude complete nutritional context to generate accurate recipes.
 
+## Snack Ideas for Remaining Macros
+
+You do not have to follow a full-day plan perfectly. If you know what is left
+in your day, ask for a small combination of foods that fits:
+
+``` bash
+uv run llmn snack --calories 300 --protein 30 --max-carbs 20 --max-fat 10
+```
+
+This searches one-, two-, and three-food combinations, solves for practical
+portions, and ranks complementary pairings (for example protein + produce +
+a small fat portion) rather than spreading the target across many ingredients.
+Output includes grams, estimated totals, and the reason a combination was
+suggested. Add `--tag staple` to use only foods you have tagged as staples, or
+`--json` for agent-friendly output.
+
+``` bash
+# JSON for an agent
+uv run llmn snack --calories 300 --protein 30 --max-carbs 20 --max-fat 10 --json
+
+# Only use tagged staples
+uv run llmn snack --calories 200 --protein 20 --tag staple
+```
+
+If nothing fits, the command returns an empty suggestion list with explicit
+suggestions to relax the calorie window, carb/fat caps, or protein minimum.
+Suggestions are macro-first heuristics; for everyday food, tag your staples and
+use `--tag staple`. Use `--max-foods` to limit the number of ingredients,
+`--calorie-tolerance` to widen the calorie window, and `--limit` to control how
+many options are shown.
+
 ## Constraint Profiles
 
 Create YAML files to define your dietary constraints:
@@ -334,6 +365,7 @@ All commands should be prefixed with `uv run` when using `uv` as the project man
 | `llmn optimize --template` | Template-based (realistic meals) |
 | `llmn optimize --multiperiod` | Multi-period mode (per-meal constraints) |
 | `llmn optimize --verbose` | Show KKT optimality conditions |
+| `llmn snack --calories 300 --protein 30` | Suggest small food combinations for remaining macros |
 | `llmn export-for-llm <id>` | Generate LLM prompt (use `latest` for last run) |
 | `llmn history` | Show past optimization runs |
 | `llmn prices add` | Add/update a food price |

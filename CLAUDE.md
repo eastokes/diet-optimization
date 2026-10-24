@@ -100,6 +100,8 @@ uv run llmn optimize --max-foods 500   # Increase food pool (default 300)
 uv run llmn optimize --profile <name>  # Use a constraint profile
 uv run llmn optimize --file <yaml>     # Use YAML file directly
 uv run llmn optimize --verbose         # Show KKT optimality conditions
+uv run llmn snack --calories 300 --protein 30 --max-carbs 20 --max-fat 10
+                                       # Pair foods for remaining macros
 uv run llmn export-for-llm latest      # Generate Claude prompt from last run
 uv run llmn prices add <fdc_id> <price>
 uv run llmn tags add <fdc_id> <tag>

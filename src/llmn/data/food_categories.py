@@ -88,7 +88,10 @@ def classify_food(
     desc_lower = description.lower()
 
     # Check for keyword matches first for specific categories
-    has_legume_keyword = any(kw in desc_lower for kw in LEGUME_KEYWORDS)
+    has_legume_keyword = any(kw in desc_lower for kw in LEGUME_KEYWORDS) and not any(
+        false_positive in desc_lower
+        for false_positive in ("coffee bean", "cocoa bean", "vanilla bean")
+    )
     has_fruit_keyword = any(kw in desc_lower for kw in FRUIT_KEYWORDS)
     has_vegetable_keyword = any(kw in desc_lower for kw in VEGETABLE_KEYWORDS)
 
