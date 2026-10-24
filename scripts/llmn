@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Run the llmn CLI from this checkout.
+#
+# Works from any directory, needs no global install, and always resolves the
+# pinned toolchain (python/uv) through mise when uv is not on PATH:
+#
+#   ./scripts/llmn intake list --json
+#   ./scripts/llmn tdee targets --json | python -m json.tool
+#
+# Set LLMN_ALLOW_SYNC=0 to forbid implicit environment syncs (CI, read-only
+# checkouts, containers where the venv must stay untouched).
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+sync_flag=()
+if [[ "${LLMN_ALLOW_SYNC:-1}" == "0" ]]; then
+    sync_flag=(--no-sync)
+fi
+
+if command -v uv >/dev/null 2>&1; then
+    exec uv run --project "${repo_dir}" --locked "${sync_flag[@]}" llmn "$@"
+fi
+
+if command -v mise >/dev/null 2>&1; then
+    cd "${repo_dir}"
+    exec mise exec -- uv run --project "${repo_dir}" --locked "${sync_flag[@]}" llmn "$@"
+fi
+
+echo "Error: llmn needs uv (https://docs.astral.sh/uv/) or mise with the repo mise.toml." >&2
+echo "Install uv, or run: mise trust mise.toml && mise install" >&2
+exit 1

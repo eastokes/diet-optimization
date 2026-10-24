@@ -57,7 +57,15 @@ mise run build
 ```
 
 After changing dependencies in `pyproject.toml`, run `mise run lock` and review
-`uv.lock`. Use `mise exec -- uv run --locked llmn <command>` for the application.
+`uv.lock`. Use `./scripts/llmn <command>` for the application: the wrapper runs
+the pinned environment through `uv` (falling back to `mise exec -- uv` when
+`uv` is not on `PATH`), works from any directory, and needs no global install.
+`mise run llmn -- <command>` is the equivalent mise task; set
+`LLMN_ALLOW_SYNC=0` to forbid implicit syncs.
+
+Agent tip: containers may not provide `python3` or `jq` on `PATH`. Pipe
+`--json` output through `mise exec -- python -m json.tool` (or parse it in a
+Mise-provided Python script) instead of assuming those binaries exist.
 
 ## Git Workflow
 

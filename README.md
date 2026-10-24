@@ -72,6 +72,21 @@ uv run llmn --help
 pip install -e .
 ```
 
+### Running from this checkout
+
+`scripts/llmn` is a thin wrapper that resolves the pinned toolchain with `uv`
+(or `mise exec -- uv` when `uv` is not on `PATH`), so it works from any
+working directory and without a global install:
+
+``` bash
+./scripts/llmn intake list --json
+./scripts/llmn tdee progress --days 28
+mise run llmn -- user show          # equivalent through mise
+```
+
+Set `LLMN_ALLOW_SYNC=0` to forbid implicit environment syncs, for example in
+read-only checkouts or CI.
+
 For development:
 
 ``` bash

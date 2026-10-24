@@ -2,6 +2,10 @@
 python = "3.12.12"
 uv = "0.9.17"
 
+[tasks.llmn]
+description = "Run the llmn CLI from this checkout (mise run llmn -- <args>)"
+run = "uv run --locked llmn"
+
 [tasks.sync]
 description = "Install the project and development dependencies from uv.lock"
 run = "uv sync --locked --extra dev"
