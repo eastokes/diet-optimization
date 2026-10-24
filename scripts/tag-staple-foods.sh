@@ -1,11 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # tag-staple-foods.sh - Quickly tag your grocery staples
 #
 # This script helps you build a curated list of foods you actually buy.
 # Once tagged, you can use include_tags: [staple] in your profile to
 # only optimize across these foods.
 
-set -e
+set -euo pipefail
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -13,6 +13,10 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# shellcheck source=scripts/llmn-cli.sh
+source "${SCRIPT_DIR}/llmn-cli.sh"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Food category definitions (FDC IDs for common foods)
@@ -135,7 +139,7 @@ declare -A EGGS_FOODS=(
 # ─────────────────────────────────────────────────────────────────────────────
 
 show_category() {
-    local -n foods=$1
+    local -n foods="$1"
     local category_name=$2
 
     echo ""
@@ -149,7 +153,7 @@ show_category() {
 }
 
 tag_category() {
-    local -n foods=$1
+    local -n foods="$1"
     local category_name=$2
     local count=0
 
@@ -159,7 +163,7 @@ tag_category() {
     for fdc_id in "${!foods[@]}"; do
         if llmn tags add "$fdc_id" staple 2>/dev/null; then
             echo -e "  ${GREEN}+${NC} ${foods[$fdc_id]}"
-            ((count++))
+            count=$((count + 1))
         fi
     done
 
@@ -204,10 +208,17 @@ show_help() {
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────────
 
+llmn_ensure_installed
+print_success() { echo -e "${GREEN}✓${NC} $1"; }
+print_success "llmn CLI available via ${LLMN_RUNNER_DESC}"
+
 show_help
 
 while true; do
-    read -p "> " cmd args
+    if ! read -r -p "> " cmd args; then
+        echo
+        break
+    fi
 
     case $cmd in
         s|search)
@@ -254,8 +265,7 @@ while true; do
 
         c|category)
             # Parse category name and optional "tag" action
-            category=$(echo "$args" | awk '{print $1}')
-            action=$(echo "$args" | awk '{print $2}')
+            read -r category action _ <<< "$args"
 
             case $category in
                 fish)
