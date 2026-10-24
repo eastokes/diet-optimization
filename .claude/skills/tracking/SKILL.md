@@ -21,18 +21,40 @@ uv run llmn weight add 183.8 --date 2025-12-27
 # View weight history with EMA trends
 uv run llmn weight list --days 30
 
-# Log planned calorie intake
-uv run llmn calories log 1900
+# Log ACTUAL intake (used for expenditure learning)
+uv run llmn intake log 2000
 
-# Update TDEE estimate (runs Kalman filter)
-uv run llmn tdee estimate
+# Log intake for a specific date
+uv run llmn intake log 2000 --date 2026-10-22 --quality measured
+
+# Mark a day partial or estimated
+uv run llmn intake log 1200 --completeness partial
+uv run llmn intake log 2100 --quality estimated
+
+# Set a dated goal and activity context
+uv run llmn goal set --mode loss --rate -1.0 --target 165 --effective-from 2026-10-01
+uv run llmn activity set --level moderate --effective-from 2026-10-01
+
+# Persist an expenditure estimate (diagnostic snapshot)
+uv run llmn tdee estimate --as-of 2026-10-22
 
 # Show comprehensive progress report
-uv run llmn tdee progress
+uv run llmn tdee progress --as-of 2026-10-22
 
-# Get adaptive calorie targets based on current progress
-uv run llmn tdee targets
+# Get a bounded recommendation or an explicit hold
+uv run llmn tdee targets --as-of 2026-10-22 --json
 ```
+
+**Planned vs actual:** `llmn calories log` remains a *planned* intake command.
+Never treat it as consumed food. Actual intake must be logged with
+`llmn intake log`. Missing days are unknown, not zero. Partial days are excluded
+from the measured mean, and estimated days are down-weighted.
+
+**Recommendation states:** `on_track`, `intake_above_goal`,
+`intake_below_goal`, `insufficient_data`, `target_reached`, and `no_goal`.
+An insufficient-evidence result is a successful analysis with
+`recommendation.action: "hold"` and a `null` target, not a crash and not a
+fabricated number. Formula-only initialization is labelled separately.
 
 ## Workflow
 
@@ -69,16 +91,23 @@ trend_n = trend_{n-1} + 0.1 × (weight_n - trend_{n-1})
 
 This filters out daily noise with a ~10-day time constant.
 
-### Step 3: Log Planned Calories
+### Step 3: Log Actual Intake
 
-If the user mentions what they ate or their meal plan calories:
+When the user reports what they actually ate or an estimated daily total:
 
 ```bash
-uv run llmn calories log <calories>
+uv run llmn intake log <calories>
 
 # With specific date
-uv run llmn calories log <calories> --date YYYY-MM-DD
+uv run llmn intake log <calories> --date YYYY-MM-DD
+
+# Partial or estimated logs
+uv run llmn intake log <calories> --completeness partial
+uv run llmn intake log <calories> --quality estimated
 ```
+
+Use `llmn calories log` only when the user is recording a meal *plan*. It is not
+consumed intake and is excluded from expenditure learning.
 
 ### Step 4: Check Progress
 
@@ -114,30 +143,23 @@ Updated Total Daily Energy Expenditure (TDEE) estimate (4 weeks processed)
 
 After 2-3 weeks of data, the filter converges on your personalized TDEE.
 
-### Step 6: Get Adaptive Calorie Targets
+### Step 6: Get a Bounded Recommendation
 
-For actionable recommendations based on current progress:
+For an actionable recommendation based on current progress:
 
 ```bash
-uv run llmn tdee targets
+uv run llmn tdee targets --as-of YYYY-MM-DD --json
 ```
 
-This compares your current rate of loss to your goal and tells you whether to adjust:
-```
-Adaptive Calorie Targets
-  Estimated TDEE: 2378 ± 60 kcal/day
-  Goal: fat loss (1 lb/week)
+The command analyses actual intake, dates, weights, activity context, and the
+effective goal. It reports the analysis window, coverage, method, uncertainty,
+reason codes, and one of the assessment states above. Changes are bounded
+(250 kcal/day per review) and held when uncertainty is too high.
 
-Current status:
-  Average intake: 1900 kcal/day
-  Current rate: 0.9 lbs/week (losing)
-
-Recommendation:
-  Calorie target: 1900 kcal/day
-  Protein range: 148 - 185 g/day
-
-  You're on track! Keep doing what you're doing.
-```
+Never relay a `null` target as zero. If the assessment is `insufficient_data` or
+`no_goal`, ask for more complete intake/weight logs or a goal instead of
+inventing a calorie number. Formula-only initialization is explicitly labelled
+and is not evidence-backed.
 
 ## Example Progress Report
 

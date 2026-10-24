@@ -139,12 +139,84 @@ CREATE TABLE IF NOT EXISTS tdee_estimates (
     tdee_bias REAL NOT NULL DEFAULT 0.0,
     variance REAL NOT NULL DEFAULT 10000.0,
     adjusted_tdee REAL NOT NULL,
+    method TEXT,
+    policy_version TEXT,
+    interval_start DATE,
+    interval_end DATE,
+    weight_observations INTEGER,
+    complete_intake_days INTEGER,
+    partial_intake_days INTEGER,
+    input_fingerprint TEXT,
     UNIQUE(user_id, estimated_at),
     FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tdee_estimates_user_date ON tdee_estimates(user_id, estimated_at);
 """
+
+
+# Tracking-v2 tables. Kept separate so the versioned migration and fresh-schema
+# paths cannot drift apart.
+TRACKING_V2_SQL = """
+-- Dated intake observations. A missing row means unknown intake; a row with
+-- kind='legacy_unclassified' is an old planned value that must not be used for
+-- expenditure learning until the owner classifies it.
+CREATE TABLE IF NOT EXISTS intake_log (
+    intake_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    date DATE NOT NULL,
+    kcal REAL NOT NULL CHECK(kcal >= 0),
+    kind TEXT NOT NULL CHECK(kind IN ('actual', 'planned', 'legacy_unclassified')),
+    completeness TEXT NOT NULL CHECK(completeness IN ('complete', 'partial', 'unknown')),
+    quality TEXT NOT NULL CHECK(quality IN ('measured', 'estimated', 'unknown')),
+    provenance TEXT NOT NULL DEFAULT 'manual',
+    notes TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, date, kind),
+    FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_intake_log_user_date ON intake_log(user_id, date);
+CREATE INDEX IF NOT EXISTS idx_intake_log_kind ON intake_log(kind);
+
+-- Effective-dated weight-change goals. Historic periods are preserved.
+CREATE TABLE IF NOT EXISTS goal_periods (
+    goal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    effective_from DATE NOT NULL,
+    mode TEXT NOT NULL CHECK(mode IN ('loss', 'maintenance', 'gain')),
+    rate_lbs_per_week REAL NOT NULL,
+    target_weight_lbs REAL,
+    training_priority TEXT,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, effective_from),
+    FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_periods_user_date ON goal_periods(user_id, effective_from);
+
+-- Effective-dated activity/training context.
+CREATE TABLE IF NOT EXISTS activity_periods (
+    activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    effective_from DATE NOT NULL,
+    activity_level TEXT NOT NULL CHECK(activity_level IN ('sedentary', 'lightly_active', 'moderate', 'active', 'very_active')),
+    training_priority TEXT,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, effective_from),
+    FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_periods_user_date ON activity_periods(user_id, effective_from);
+"""
+
+# Append the v2 tables to the fresh-schema SQL while keeping the constant above
+# available to the migration runner.
+SCHEMA_SQL = SCHEMA_SQL + TRACKING_V2_SQL
 
 
 def get_schema_sql() -> str:
@@ -156,13 +228,12 @@ def migrate_user_profiles_add_diet_columns(conn) -> bool:
     """
     Add diet_type and diet_style columns to user_profiles if they don't exist.
 
-    This is a migration for existing databases that were created before
-    these columns were added to the schema.
+    This is retained for callers that used the pre-versioned helper. New code
+    should call :func:`llmn.db.migrations.migrate_schema`, which records applied
+    versions and applies this change as migration 1.
 
     Returns True if migration was performed, False if columns already existed.
     """
-    import sqlite3
-
     cursor = conn.execute("PRAGMA table_info(user_profiles)")
     columns = {row[1] for row in cursor.fetchall()}
 

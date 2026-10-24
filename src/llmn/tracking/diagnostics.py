@@ -8,11 +8,12 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Optional
 
-from llmn.profiles.body_calc import calculate_bmr, calculate_tdee
 from llmn.tracking.ema import estimate_daily_calorie_balance, estimate_weekly_change
+from llmn.tracking.estimation import AnalysisWindow, summarize_intake
+from llmn.tracking.formula import mifflin_tdee_at_weight
 from llmn.tracking.models import TDEEEstimate, UserProfile, WeightEntry
 from llmn.tracking.queries import (
-    CalorieQueries,
+    IntakeQueries,
     TDEEQueries,
     UserQueries,
     WeightQueries,
@@ -42,7 +43,7 @@ class TDEEReport:
     tdee_bias: float
     adjusted_tdee: float
     uncertainty_95ci: float
-    avg_planned_calories: Optional[float]
+    avg_actual_calories: Optional[float]
     expected_deficit: Optional[float]  # mifflin_tdee - planned
     implied_deficit: Optional[float]  # from trend change
 
@@ -64,47 +65,26 @@ def calculate_mifflin_tdee(profile: UserProfile) -> float:
     return calculate_mifflin_tdee_at_weight(profile, profile.weight_lbs)
 
 
-def calculate_mifflin_tdee_at_weight(profile: UserProfile, weight_lbs: float) -> float:
-    """
-    Calculate TDEE at a specific weight using Mifflin-St Jeor + activity multiplier.
-
-    This allows time-varying TDEE calculation as weight changes, keeping the
-    learned bias interpretable as personal deviation from formula.
-
-    Args:
-        profile: User profile (for height, age, sex, activity level)
-        weight_lbs: Weight to use for calculation (in pounds)
-
-    Returns:
-        TDEE in kcal/day
-    """
-    height_inches = profile.height_inches
-    age = profile.age
-    sex = profile.sex
-
-    # Calculate BMR
-    bmr = calculate_bmr(age, sex, height_inches, weight_lbs)
-
-    # Activity multipliers (Harris-Benedict)
-    activity_multipliers = {
-        "sedentary": 1.2,
-        "lightly_active": 1.375,
-        "moderate": 1.55,
-        "active": 1.725,
-        "very_active": 1.9,
-    }
-
-    multiplier = activity_multipliers.get(profile.activity_level, 1.55)
-    return bmr * multiplier
+def calculate_mifflin_tdee_at_weight(
+    profile: UserProfile,
+    weight_lbs: float,
+    activity_level: Optional[str] = None,
+) -> float:
+    """Calculate TDEE at a specific weight and optional activity override."""
+    return mifflin_tdee_at_weight(profile, weight_lbs, activity_level)
 
 
 def generate_weight_report(
     conn: sqlite3.Connection,
     user_id: int,
     days: int = 30,
+    as_of: Optional[date] = None,
 ) -> Optional[WeightReport]:
-    """Generate a weight tracking report."""
-    history = WeightQueries.get_weight_history(conn, user_id, days=days)
+    """Generate a weight tracking report for a calendar interval."""
+    end_date = as_of or date.today()
+    history = WeightQueries.get_weight_history(
+        conn, user_id, days=days, end_date=end_date
+    )
 
     if len(history) < 2:
         return None
@@ -139,6 +119,7 @@ def generate_tdee_report(
     user_id: int,
     profile: UserProfile,
     weight_report: Optional[WeightReport] = None,
+    as_of: Optional[date] = None,
 ) -> TDEEReport:
     """Generate a TDEE analysis report."""
     mifflin_tdee = calculate_mifflin_tdee(profile)
@@ -157,10 +138,17 @@ def generate_tdee_report(
 
     uncertainty_95ci = 1.96 * math.sqrt(variance)
 
-    # Get average planned calories over period
-    end_date = date.today()
-    start_date = end_date - timedelta(days=30)
-    avg_calories = CalorieQueries.get_average_calories(conn, user_id, start_date, end_date)
+    # Use measured actual intake. Legacy planned values are not treated as
+    # consumed intake; missing actual data leaves the average unknown.
+    end_date = as_of or date.today()
+    start_date = end_date - timedelta(days=29)
+    intake_entries = IntakeQueries.get_entries(
+        conn, user_id, start_date, end_date, kind="actual"
+    )
+    intake_summary = summarize_intake(
+        intake_entries, AnalysisWindow(start_date, end_date)
+    )
+    avg_calories = intake_summary.mean_kcal
 
     expected_deficit = None
     if avg_calories is not None:
@@ -175,7 +163,7 @@ def generate_tdee_report(
         tdee_bias=tdee_bias,
         adjusted_tdee=adjusted_tdee,
         uncertainty_95ci=uncertainty_95ci,
-        avg_planned_calories=avg_calories,
+        avg_actual_calories=avg_calories,
         expected_deficit=expected_deficit,
         implied_deficit=implied_deficit,
     )
@@ -185,17 +173,20 @@ def generate_progress_report(
     conn: sqlite3.Connection,
     user_id: int,
     days: int = 30,
+    as_of: Optional[date] = None,
 ) -> Optional[ProgressReport]:
     """Generate a comprehensive progress report."""
     profile = UserQueries.get_user(conn, user_id)
     if profile is None:
         return None
 
-    weight_report = generate_weight_report(conn, user_id, days)
+    weight_report = generate_weight_report(conn, user_id, days, as_of=as_of)
     if weight_report is None:
         return None
 
-    tdee_report = generate_tdee_report(conn, user_id, profile, weight_report)
+    tdee_report = generate_tdee_report(
+        conn, user_id, profile, weight_report, as_of=as_of
+    )
 
     # Goal progress
     goal_weight = profile.target_weight_lbs
@@ -273,9 +264,9 @@ def format_tdee_report(report: TDEEReport) -> str:
         f"Your estimated TDEE:      {report.adjusted_tdee:.0f} ± {report.uncertainty_95ci:.0f} kcal/day",
     ]
 
-    if report.avg_planned_calories:
+    if report.avg_actual_calories:
         lines.append("")
-        lines.append(f"Average planned intake: {report.avg_planned_calories:.0f} kcal/day")
+        lines.append(f"Average actual intake: {report.avg_actual_calories:.0f} kcal/day")
 
         if report.expected_deficit is not None:
             lines.append(f"  Expected deficit: {report.expected_deficit:.0f} kcal/day")

@@ -350,11 +350,19 @@ All commands should be prefixed with `uv run` when using `uv` as the project man
 | `llmn profile show` | Show profile details |
 | `llmn user create` | Create user profile (age, sex, height, activity level) |
 | `llmn user show` | Show current user profile |
-| `llmn weight add <lbs>` | Log today's weight (computes EMA trend automatically) |
-| `llmn weight list` | Show weight history with trends |
-| `llmn calories log <kcal>` | Log planned calorie intake |
-| `llmn tdee estimate` | Run Kalman filter to estimate personalized TDEE |
-| `llmn tdee progress` | Show weight/TDEE progress report |
+| `llmn weight add <lbs>` | Log today's weight (gap-aware EMA trend) |
+| `llmn weight list` | Show weight history for a calendar interval |
+| `llmn weight delete --date` | Delete a weight entry and rebuild later trends |
+| `llmn intake log <kcal>` | Log actual (or explicitly planned) intake |
+| `llmn intake list` | Show intake entries and actual-intake coverage |
+| `llmn intake confirm-legacy` | Preview/classify old planned calories as actual |
+| `llmn goal set --mode loss --rate -1` | Set an effective-dated weight-change goal |
+| `llmn goal show` / `llmn goal history` | Resolve or list goal periods |
+| `llmn activity set --level moderate` | Record effective-dated activity context |
+| `llmn calories log <kcal>` | Legacy planned-intake command (never consumed intake) |
+| `llmn tdee estimate` | Persist a calendar-aware expenditure estimate |
+| `llmn tdee targets` | Get a bounded recommendation or explicit hold |
+| `llmn tdee progress` | Show progress plus the shared analysis |
 
 ## Advanced LLM Features
 
@@ -363,6 +371,33 @@ These features are designed for LLM agents doing iterative diet optimization.
 **Claude Code users**: This project includes slash commands (`/llmn`, `/template`,
 `/multiperiod`, `/recipes`, `/tracking`) for interactive meal planning and weight tracking.
 See `.claude/skills/` for details.
+
+### Standalone calorie recommendations
+
+Tracking works without food data, food search, recipes, meal plans, or the
+optimizer. Actual intake, planned intake, and recommended targets are separate:
+
+``` bash
+# Actual intake (used for expenditure learning)
+uv run llmn intake log 2000 --date 2026-10-22 --json
+
+# Planned intake is never treated as consumed intake
+uv run llmn calories log 1900 --date 2026-10-22
+
+# Dated goals and activity context
+uv run llmn goal set --mode loss --rate -1.0 --target 165 --effective-from 2026-10-01
+uv run llmn activity set --level moderate --effective-from 2026-10-01
+
+# Bounded recommendation with explicit evidence state, or an explicit hold
+uv run llmn tdee targets --as-of 2026-10-22 --window-days 28 --json
+```
+
+JSON uses `schema_version: 2`; missing values are `null`, not zero. Assessments
+include `on_track`, `intake_above_goal`, `intake_below_goal`, `insufficient_data`,
+`target_reached`, and `no_goal`. When evidence is insufficient, the command
+returns a successful analysis with `recommendation.action: "hold"` rather than a
+fabricated target. Numerical guardrails and sources are documented in
+`docs/tracking-policy.md`.
 
 ### Meta-Optimization
 
