@@ -87,6 +87,10 @@ Interactive scripts for new users:
 ./scripts/tag-staple-foods.sh
 ```
 
+These scripts use `scripts/llmn-cli.sh` to run the local checkout through
+`uv` (or `mise exec -- uv` when uv is only provided by mise). They do not
+install `llmn` globally.
+
 ## CLI Usage
 
 ### Core Commands

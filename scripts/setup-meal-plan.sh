@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # setup-meal-plan.sh - Interactive setup for meal planning optimization
 #
 # This script walks you through:
-# 1. Installing the llmn CLI
+# 1. Preparing the local uv environment
 # 2. Downloading and loading USDA nutrition data
 # 3. Selecting your diet type and style
 # 4. Creating a personalized constraint profile based on your goals
@@ -10,12 +10,11 @@
 # 6. Running your first optimization
 # 7. Generating a prompt for Claude to create recipes
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
@@ -32,10 +31,6 @@ print_step() {
     echo -e "${GREEN}→${NC} $1"
 }
 
-print_warning() {
-    echo -e "${YELLOW}⚠${NC} $1"
-}
-
 print_error() {
     echo -e "${RED}✗${NC} $1"
 }
@@ -44,11 +39,28 @@ print_success() {
     echo -e "${GREEN}✓${NC} $1"
 }
 
+prompt_positive_int() {
+    local prompt="$1"
+    local default="$2"
+    local value
+    while true; do
+        read -r -p "${prompt} [${default}]: " value
+        value="${value:-$default}"
+        if [[ "$value" =~ ^[0-9]+$ ]] && (( 10#$value > 0 )); then
+            printf '%s\n' "$((10#$value))"
+            return 0
+        fi
+        print_error "Enter a positive whole number." >&2
+    done
+}
+
 # Get script directory (where this script lives)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PROJECT_DIR="$( cd "$SCRIPT_DIR/.." && pwd )"
+# shellcheck source=scripts/llmn-cli.sh
+source "${SCRIPT_DIR}/llmn-cli.sh"
 DATA_DIR="${HOME}/.llmn"
 PROFILES_DIR="${DATA_DIR}/profiles"
+SKIP_INIT=false
 
 print_header "Welcome to Meal Plan Optimizer Setup"
 
@@ -60,19 +72,16 @@ echo "At the end, you'll have a food list you can give to Claude to generate rec
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Step 1: Check/Install CLI
+# Step 1: Prepare the Python environment
 # ─────────────────────────────────────────────────────────────────────────────
 
-print_header "Step 1: Checking Installation"
+print_header "Step 1: Preparing the Python Environment"
 
-if command -v llmn &> /dev/null; then
-    print_success "llmn CLI is installed"
-else
-    print_warning "llmn CLI not found. Installing..."
-    cd "$PROJECT_DIR"
-    pip install -e ".[dev]"
-    print_success "Installed llmn CLI"
-fi
+echo "The scripts run llmn from this checkout through uv, so the CLI does not"
+echo "need to be installed globally."
+echo ""
+llmn_ensure_installed
+print_success "llmn CLI available via ${LLMN_RUNNER_DESC}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 2: Check/Download USDA Data
@@ -84,7 +93,7 @@ print_header "Step 2: USDA Nutrition Database"
 if [ -f "${DATA_DIR}/llmn.db" ]; then
     print_success "Database already exists at ${DATA_DIR}/llmn.db"
     echo ""
-    read -p "Do you want to reinitialize the database? (y/N): " reinit
+    read -r -p "Do you want to reinitialize the database? (y/N): " reinit
     if [[ ! "$reinit" =~ ^[Yy]$ ]]; then
         echo "Keeping existing database."
         SKIP_INIT=true
@@ -99,7 +108,7 @@ if [ "${SKIP_INIT}" != "true" ]; then
     echo "Select: 'Full Download of All Data Types' → CSV format"
     echo ""
 
-    read -p "Enter path to extracted USDA CSV directory: " usda_path
+    read -r -p "Enter path to extracted USDA CSV directory: " usda_path
 
     if [ ! -d "$usda_path" ]; then
         print_error "Directory not found: $usda_path"
@@ -129,7 +138,7 @@ echo "  2) Pescatarian - fish/seafood + eggs, no meat"
 echo "  3) Vegetarian - eggs + dairy, no meat or fish"
 echo "  4) Vegan - plant-based only"
 echo ""
-read -p "Enter choice (1-4) [1]: " diet_type_choice
+read -r -p "Enter choice (1-4) [1]: " diet_type_choice
 diet_type_choice=${diet_type_choice:-1}
 
 case $diet_type_choice in
@@ -171,7 +180,7 @@ echo "  3) Low-Carb - reduced carbohydrates, higher fat"
 echo "  4) High-Protein - focus on protein for muscle building"
 echo "  5) Mediterranean - olive oil, fish, vegetables, legumes"
 echo ""
-read -p "Enter choice (1-5) [1]: " diet_style_choice
+read -r -p "Enter choice (1-5) [1]: " diet_style_choice
 diet_style_choice=${diet_style_choice:-1}
 
 case $diet_style_choice in
@@ -226,7 +235,7 @@ echo "  2) Muscle Gain (bulking) - calorie surplus, high protein & carbs"
 echo "  3) Maintenance - balanced nutrition, maintain weight"
 echo "  4) Custom - I'll specify my own constraints"
 echo ""
-read -p "Enter choice (1-4): " goal_choice
+read -r -p "Enter choice (1-4): " goal_choice
 
 case $goal_choice in
     1)
@@ -272,19 +281,19 @@ echo ""
 echo "Now let's set your daily calorie target."
 echo "(Hint: Use a TDEE calculator to estimate your needs)"
 echo ""
-read -p "Minimum daily calories [$DEFAULT_CAL_MIN]: " cal_min
-cal_min=${cal_min:-$DEFAULT_CAL_MIN}
-
-read -p "Maximum daily calories [$DEFAULT_CAL_MAX]: " cal_max
-cal_max=${cal_max:-$DEFAULT_CAL_MAX}
+cal_min=$(prompt_positive_int "Minimum daily calories" "$DEFAULT_CAL_MIN")
+cal_max=$(prompt_positive_int "Maximum daily calories" "$DEFAULT_CAL_MAX")
+while (( cal_max < cal_min )); do
+    print_error "Maximum calories must be at least the minimum."
+    cal_max=$(prompt_positive_int "Maximum daily calories" "$DEFAULT_CAL_MAX")
+done
 
 # Get protein target
 echo ""
 echo "Protein is crucial for muscle maintenance and satiety."
 echo "(Recommended: 0.7-1g per pound of body weight)"
 echo ""
-read -p "Minimum daily protein in grams [$DEFAULT_PROTEIN]: " protein_min
-protein_min=${protein_min:-$DEFAULT_PROTEIN}
+protein_min=$(prompt_positive_int "Minimum daily protein in grams" "$DEFAULT_PROTEIN")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Step 6: Tag Staple Foods
@@ -298,7 +307,7 @@ echo ""
 echo "Based on your diet ($DIET_TYPE_DESC, $DIET_STYLE_DESC), we'll suggest"
 echo "common staple foods to get you started."
 echo ""
-read -p "Would you like to auto-tag recommended staples? (Y/n): " auto_tag
+read -r -p "Would you like to auto-tag recommended staples? (Y/n): " auto_tag
 auto_tag=${auto_tag:-Y}
 
 if [[ "$auto_tag" =~ ^[Yy]$ ]]; then
@@ -459,7 +468,7 @@ echo "Now we'll run the optimizer to find a diverse set of foods"
 echo "that meets all your nutritional requirements."
 echo ""
 
-read -p "Press Enter to run optimization..."
+read -r -p "Press Enter to run optimization..."
 
 print_step "Running optimization..."
 echo ""
@@ -476,8 +485,7 @@ print_header "Step 9: Generate Recipe Prompt"
 
 echo "Now let's export your food list so Claude can create recipes."
 echo ""
-read -p "How many days should the meal plan cover? [7]: " num_days
-num_days=${num_days:-7}
+num_days=$(prompt_positive_int "How many days should the meal plan cover?" "7")
 
 OUTPUT_FILE="${DATA_DIR}/meal_plan_request.md"
 llmn export-for-llm latest --days "$num_days" --output "$OUTPUT_FILE"

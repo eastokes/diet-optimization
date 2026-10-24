@@ -92,8 +92,9 @@ Run the interactive setup script that guides you through everything:
 ./scripts/setup-meal-plan.sh
 ```
 
-This will:
-1. Install the CLI if needed
+The script runs `llmn` from this checkout through `uv`, syncing the local
+environment when needed, so no global install is required. It will:
+1. Prepare the local Python environment with `uv`
 2. Help you download and load USDA data
 3. Ask about your diet type (omnivore, pescatarian, vegetarian, vegan)
 4. Ask about your diet style (standard, slow-carb, low-carb, high-protein, Mediterranean)
@@ -671,8 +672,12 @@ Settings are stored in `~/.llmn/`:
 Helper scripts in `scripts/`:
 
     scripts/
+    ├── llmn-cli.sh           # Shared uv/mise-aware llmn runner
     ├── setup-meal-plan.sh    # Interactive first-time setup
     └── tag-staple-foods.sh   # Bulk tag staple foods by category
+
+Both helper scripts invoke the local checkout through `uv run`; they do not
+require a global `llmn` install.
 
 Example profiles in `examples/constraints/`:
 
