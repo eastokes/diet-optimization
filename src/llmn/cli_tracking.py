@@ -84,6 +84,8 @@ def _emit(
         console.print(line)
     for warning in warnings or []:
         console.print(f"[yellow]{warning}[/yellow]")
+    for suggestion in suggestions or []:
+        console.print(f"[dim]Hint: {suggestion}[/dim]")
 
 
 def _fail(

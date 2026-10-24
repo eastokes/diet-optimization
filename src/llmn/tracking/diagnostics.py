@@ -28,7 +28,7 @@ from llmn.tracking.estimation import AnalysisWindow
 from llmn.tracking.formula import mifflin_tdee_at_weight
 from llmn.tracking.models import BodyComposition, UserProfile
 from llmn.tracking.queries import BodyCompositionQueries, WeightQueries
-from llmn.tracking.recommendations import GoalSpec
+from llmn.tracking.recommendations import GoalSpec, Recommendation
 from llmn.tracking.service import TrackingAnalysis
 
 
@@ -242,7 +242,7 @@ def build_progress_report(
     latest_composition = latest_scan(compositions)
     body_comp_delta = compare_compositions(*comparison) if comparison is not None else None
 
-    notes = _progress_notes(weight_report, tdee_report, goal)
+    notes = _progress_notes(weight_report, tdee_report, goal, analysis.recommendation)
     if (
         latest_composition is not None
         and latest_composition.weight_lbs is not None
@@ -276,6 +276,7 @@ def _progress_notes(
     weight_report: WeightReport,
     tdee_report: TDEEReport,
     goal: GoalSpec | None,
+    recommendation: Recommendation | None = None,
 ) -> list[str]:
     notes: list[str] = []
     measured = tdee_report.measured_rate_lbs_per_week
@@ -295,22 +296,40 @@ def _progress_notes(
         diff = tdee_report.expected_deficit - tdee_report.implied_deficit_measured
         if abs(diff) > 150:
             direction = "slower" if diff > 0 else "faster"
+            comparison = (
+                "the formula baseline (no validated segments yet)"
+                if tdee_report.method == "formula_only"
+                else "the expenditure estimate"
+            )
             notes.append(
-                f"Losing {direction} than the expenditure estimate predicts by "
-                f"~{abs(diff):.0f} kcal/day (expected deficit minus deficit implied by "
-                "the measured rate). Possible causes: unlogged intake, activity "
-                "different from the assumed level, or a TDEE estimate that does not "
-                "fit you yet."
+                f"Losing {direction} than {comparison} predicts by ~{abs(diff):.0f} "
+                "kcal/day (expected deficit minus deficit implied by the measured "
+                "rate). Possible causes: unlogged intake, activity different from the "
+                "assumed level, or a baseline that does not fit you yet."
             )
 
     if measured is not None and goal is not None:
         difference = measured - goal.rate_lbs_per_week
         if abs(difference) > policy.RATE_TOLERANCE_LBS_PER_WEEK:
-            notes.append(
-                f"Measured rate ({measured:+.2f} lbs/week) is {abs(difference):.2f} lbs/week "
-                f"away from the goal ({goal.rate_lbs_per_week:+.2f}). Run "
-                "'llmn tdee targets' for the bounded intake recommendation."
-            )
+            if recommendation is not None and recommendation.action == "hold":
+                reason = (
+                    "the evidence is not strong enough to justify a change"
+                    if recommendation.assessment == "insufficient_data"
+                    else "the recommendation is held"
+                )
+                notes.append(
+                    f"Measured rate ({measured:+.2f} lbs/week) is "
+                    f"{abs(difference):.2f} lbs/week away from the goal "
+                    f"({goal.rate_lbs_per_week:+.2f}), but {reason}. Log intake and "
+                    "weigh-ins more densely, then re-run."
+                )
+            else:
+                notes.append(
+                    f"Measured rate ({measured:+.2f} lbs/week) is "
+                    f"{abs(difference):.2f} lbs/week away from the goal "
+                    f"({goal.rate_lbs_per_week:+.2f}). Run 'llmn tdee targets' for the "
+                    "bounded intake recommendation."
+                )
     elif measured is not None and goal is None:
         notes.append("No dated goal is set; rates are reported without a target.")
 
