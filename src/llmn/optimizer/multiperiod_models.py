@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from llmn.optimizer.models import NutrientConstraint
 
@@ -209,7 +210,7 @@ class MultiPeriodResult:
     message: str
     meals: list[MealResult]
     daily_totals: dict[str, float]  # calories, protein, carbs, fat, cost
-    solver_info: dict  # elapsed_seconds, n_vars, n_meals, etc.
+    solver_info: dict[str, Any]  # elapsed_seconds, n_vars, n_meals, etc.
     infeasibility_diagnosis: InfeasibilityDiagnosis | None = None
 
 

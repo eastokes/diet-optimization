@@ -294,7 +294,7 @@ def _is_feasible(
 
     try:
         solution = solve_problem(problem, solver="clarabel")
-        return solution.found
+        return bool(solution.found)
     except Exception:
         return False
 

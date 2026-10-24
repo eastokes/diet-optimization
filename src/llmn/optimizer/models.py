@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class ObjectiveType(Enum):
@@ -126,7 +127,7 @@ class OptimizationResult:
     foods: list[FoodResult]
     total_cost: float | None
     nutrients: list[NutrientResult]
-    solver_info: dict  # iterations, time, etc.
+    solver_info: dict[str, Any]  # iterations, time, etc.
     kkt_analysis: KKTAnalysis | None = None  # Populated when --verbose is used
 
 
@@ -142,7 +143,7 @@ class LLMNError(Exception):
 class InfeasibleDietError(LLMNError):
     """Raised when no feasible diet exists for given constraints."""
 
-    def __init__(self, message: str, constraint_analysis: dict | None = None):
+    def __init__(self, message: str, constraint_analysis: dict[str, Any] | None = None):
         super().__init__(message)
         self.constraint_analysis = constraint_analysis or {}
 

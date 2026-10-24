@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from string import Template
+from typing import Any
 
 import yaml
 
@@ -184,7 +185,7 @@ class LLMPromptGenerator:
         """
         self.config_dir = config_dir or Path.home() / ".llmn"
         self._template: str | None = None
-        self._preferences: dict | None = None
+        self._preferences: dict[str, Any] | None = None
 
     @property
     def template(self) -> str:
@@ -198,7 +199,7 @@ class LLMPromptGenerator:
         return self._template
 
     @property
-    def preferences(self) -> dict:
+    def preferences(self) -> dict[str, Any]:
         """Load user preferences from YAML."""
         if self._preferences is None:
             pref_path = self.config_dir / "preferences.yaml"
@@ -209,7 +210,7 @@ class LLMPromptGenerator:
                 self._preferences = self._default_preferences()
         return self._preferences
 
-    def _default_preferences(self) -> dict:
+    def _default_preferences(self) -> dict[str, Any]:
         """Return default preferences."""
         return {
             "cuisines": ["any"],

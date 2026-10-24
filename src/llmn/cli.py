@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, TextIO
 
 import typer
 from rich.console import Console
@@ -65,7 +66,7 @@ app.add_typer(activity_app, name="activity")
 # ============================================================================
 
 
-def output_json(response: dict, file=None) -> None:
+def output_json(response: Any, file: TextIO | None = None) -> None:
     """Output JSON response to stdout or file."""
     json_str = json.dumps(response, indent=2)
     if file:
@@ -974,7 +975,7 @@ def optimize(
             # Format template output
             if json_output:
                 if template_result.success:
-                    response_data = {
+                    response_data: dict[str, Any] = {
                         "run_id": None,
                         "status": "optimal",
                         "profile": profile_name,
@@ -1127,6 +1128,7 @@ def optimize(
 
                 consolidated = consolidate_result(mp_result, max_foods_per_meal=5)
                 shopping = generate_shopping_list(consolidated, days=days if days > 1 else 7)
+                assert shopping is not None
 
             # Format multi-period output
             if json_output:
@@ -1139,7 +1141,7 @@ def optimize(
                 }
 
                 if mp_result.success:
-                    if consolidated:
+                    if consolidated and shopping:
                         # Use consolidated output
                         response_data["consolidated_meals"] = consolidated_result_to_dict(
                             consolidated
@@ -1213,7 +1215,7 @@ def optimize(
                 # Panel and Table are imported at module level
 
                 if mp_result.success:
-                    if consolidated:
+                    if consolidated and shopping:
                         # Practical mode: show consolidated meals + shopping list
                         from llmn.export.shopping_list import format_shopping_list
 
@@ -1226,21 +1228,26 @@ def optimize(
                             )
                         )
 
-                        for meal in consolidated.meals:
+                        for consolidated_meal in consolidated.meals:
                             table = Table(
-                                title=f"{meal.meal_name.title()} ({meal.total_calories:.0f} kcal)"
+                                title=(
+                                    f"{consolidated_meal.meal_name.title()} "
+                                    f"({consolidated_meal.total_calories:.0f} kcal)"
+                                )
                             )
                             table.add_column("Food", style="cyan")
                             table.add_column("Amount", justify="right")
 
-                            for food in meal.foods:
-                                table.add_row(food.name, f"{food.grams:.0f}g")
+                            for consolidated_food in consolidated_meal.foods:
+                                table.add_row(
+                                    consolidated_food.name, f"{consolidated_food.grams:.0f}g"
+                                )
 
                             console.print(table)
                             console.print(
-                                f"[dim]P: {meal.total_protein:.0f}g | "
-                                f"C: {meal.total_carbs:.0f}g | "
-                                f"F: {meal.total_fat:.0f}g[/dim]\n"
+                                f"[dim]P: {consolidated_meal.total_protein:.0f}g | "
+                                f"C: {consolidated_meal.total_carbs:.0f}g | "
+                                f"F: {consolidated_meal.total_fat:.0f}g[/dim]\n"
                             )
 
                         console.print(
@@ -1267,11 +1274,11 @@ def optimize(
                             )
                         )
 
-                        for meal in mp_result.meals:
+                        for meal_result in mp_result.meals:
                             table = Table(
                                 title=(
-                                    f"{meal.meal_type.value.title()} "
-                                    f"({meal.total_calories:.0f} kcal)"
+                                    f"{meal_result.meal_type.value.title()} "
+                                    f"({meal_result.total_calories:.0f} kcal)"
                                 )
                             )
                             table.add_column("Food", style="cyan")
@@ -1479,14 +1486,15 @@ def optimize(
             if result.kkt_analysis:
                 binding = [c for c in result.kkt_analysis.nutrient_constraints if c.is_binding]
                 if binding:
-                    for c in binding[:3]:
-                        if "min" in c.constraint_type.lower():
+                    for constraint in binding[:3]:
+                        if "min" in constraint.constraint_type.lower():
                             suggestions.append(
-                                f"{c.name} is at minimum - consider relaxing to allow more variety"
+                                f"{constraint.name} is at minimum - "
+                                "consider relaxing to allow more variety"
                             )
                         else:
                             suggestions.append(
-                                f"{c.name} is at maximum - consider increasing limit"
+                                f"{constraint.name} is at maximum - consider increasing limit"
                             )
 
             # Cost suggestion
@@ -1792,7 +1800,7 @@ def export_for_llm(
             )
         )
 
-    nutrients = [
+    nutrient_results = [
         NutrientResult(
             nutrient_id=int(nid),
             name=n["name"],
@@ -1811,7 +1819,7 @@ def export_for_llm(
         message=result_data["message"],
         foods=foods,
         total_cost=result_data["solution"]["total_cost"],
-        nutrients=nutrients,
+        nutrients=nutrient_results,
         solver_info=result_data.get("solver_info", {}),
     )
 
@@ -3924,11 +3932,12 @@ def calories_list(
                 console.print("[red]No user profile found[/red]")
             raise typer.Exit(1)
 
+        assert profile.user_id is not None
         history = CalorieQueries.get_calorie_history(
             conn,
             profile.user_id,
             start_date,
-            end_date,  # type: ignore
+            end_date,
         )
 
     if not history:
@@ -4373,9 +4382,9 @@ def snack(
         + (f", ≤{request.max_carbs:.0f} g carbs" if request.max_carbs is not None else "")
         + (f", ≤{request.max_fat:.0f} g fat" if request.max_fat is not None else "")
     )
-    for index, suggestion in enumerate(result.suggestions, start=1):
+    for index, snack in enumerate(result.suggestions, start=1):
         console.print()
-        for line in format_suggestion(index, suggestion):
+        for line in format_suggestion(index, snack):
             console.print(line, soft_wrap=True)
     if request.include_tag is None:
         console.print()

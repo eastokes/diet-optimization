@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from typing import Any
 
 import numpy as np
 from qpsolvers import Problem, solve_problem
@@ -112,6 +113,7 @@ def solve_multiperiod_diet(
 
     # Parse solution vector back to meal structure
     x = solution.x
+    assert x is not None
     meals = _parse_solution_to_meals(x, data, builder, conn)
 
     # Calculate daily totals
@@ -151,7 +153,7 @@ def solve_multiperiod_diet(
 
 def _parse_solution_to_meals(
     x: np.ndarray,
-    data: dict,
+    data: dict[str, Any],
     builder: MultiPeriodConstraintBuilder,
     conn: sqlite3.Connection,
 ) -> list[MealResult]:

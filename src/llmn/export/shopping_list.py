@@ -7,6 +7,7 @@ and produces a practical shopping list with weekly totals.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, TypedDict
 
 from llmn.export.meal_consolidator import ConsolidatedResult
 
@@ -35,8 +36,16 @@ class ShoppingList:
     notes: list[str] = field(default_factory=list)
 
 
+class UnitConversion(TypedDict):
+    """Unit conversion metadata for a shopping item."""
+
+    unit: str
+    grams_per_unit: int
+    format: str
+
+
 # Common unit conversions for practical shopping
-UNIT_CONVERSIONS = {
+UNIT_CONVERSIONS: dict[str, UnitConversion] = {
     # Proteins
     "eggs": {"unit": "eggs", "grams_per_unit": 50, "format": "{n} eggs"},
     "salmon": {"unit": "lb", "grams_per_unit": 454, "format": "{n:.1f} lb"},
@@ -148,7 +157,7 @@ def generate_shopping_list(
         ShoppingList with items grouped by category
     """
     # Aggregate foods across all meals
-    food_totals: dict[str, dict] = {}  # name -> {grams, calories, protein}
+    food_totals: dict[str, dict[str, Any]] = {}  # name -> {grams, calories, protein}
 
     for meal in result.meals:
         for food in meal.foods:
@@ -252,7 +261,7 @@ def format_shopping_list(shopping_list: ShoppingList) -> str:
     return "\n".join(lines)
 
 
-def shopping_list_to_dict(shopping_list: ShoppingList) -> dict:
+def shopping_list_to_dict(shopping_list: ShoppingList) -> dict[str, Any]:
     """Convert shopping list to dict for JSON output."""
     return {
         "days": shopping_list.days,

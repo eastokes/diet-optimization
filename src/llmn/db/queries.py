@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from typing import cast
 
 
 class FoodQueries:
@@ -53,7 +54,7 @@ class FoodQueries:
             Food row or None if not found
         """
         query = "SELECT * FROM foods WHERE fdc_id = ?"
-        return conn.execute(query, (fdc_id,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (fdc_id,)).fetchone())
 
     @staticmethod
     def get_food_nutrients(conn: sqlite3.Connection, fdc_id: int) -> list[sqlite3.Row]:
@@ -116,7 +117,7 @@ class NutrientQueries:
             Nutrient row or None
         """
         query = "SELECT * FROM nutrients WHERE nutrient_id = ?"
-        return conn.execute(query, (nutrient_id,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (nutrient_id,)).fetchone())
 
     @staticmethod
     def get_all_nutrients(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -171,7 +172,7 @@ class PriceQueries:
             Price row or None
         """
         query = "SELECT * FROM prices WHERE fdc_id = ?"
-        return conn.execute(query, (fdc_id,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (fdc_id,)).fetchone())
 
     @staticmethod
     def get_foods_with_prices(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -379,7 +380,7 @@ class ProfileQueries:
             Profile row or None
         """
         query = "SELECT * FROM constraint_profiles WHERE name = ?"
-        return conn.execute(query, (name,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (name,)).fetchone())
 
     @staticmethod
     def get_profile_by_id(conn: sqlite3.Connection, profile_id: int) -> sqlite3.Row | None:
@@ -393,7 +394,7 @@ class ProfileQueries:
             Profile row or None
         """
         query = "SELECT * FROM constraint_profiles WHERE profile_id = ?"
-        return conn.execute(query, (profile_id,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (profile_id,)).fetchone())
 
     @staticmethod
     def list_profiles(conn: sqlite3.Connection) -> list[sqlite3.Row]:
@@ -496,7 +497,7 @@ class OptimizationRunQueries:
             Run row or None
         """
         query = "SELECT * FROM optimization_runs WHERE run_id = ?"
-        return conn.execute(query, (run_id,)).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query, (run_id,)).fetchone())
 
     @staticmethod
     def get_latest_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
@@ -513,7 +514,7 @@ class OptimizationRunQueries:
             ORDER BY run_id DESC
             LIMIT 1
         """
-        return conn.execute(query).fetchone()
+        return cast(sqlite3.Row | None, conn.execute(query).fetchone())
 
     @staticmethod
     def list_runs(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:

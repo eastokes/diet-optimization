@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class Sex(Enum):
@@ -129,7 +130,7 @@ class NutritionTargets:
     target_weight_lbs: float | None
     projected_weeks: int | None  # Weeks to reach target weight
 
-    def to_yaml_constraints(self) -> dict:
+    def to_yaml_constraints(self) -> dict[str, Any]:
         """Convert to YAML constraint format."""
         return {
             "calories": {
@@ -297,7 +298,7 @@ def calculate_targets(
     )
 
 
-def parse_goal_string(goal_string: str) -> dict:
+def parse_goal_string(goal_string: str) -> dict[str, Any]:
     """Parse a goal string like 'fat_loss:185lbs:165lbs' into components.
 
     Args:
@@ -308,7 +309,7 @@ def parse_goal_string(goal_string: str) -> dict:
     """
     parts = goal_string.split(":")
 
-    result = {
+    result: dict[str, Any] = {
         "goal": parts[0],
         "weight_lbs": None,
         "target_weight_lbs": None,
@@ -327,7 +328,7 @@ def parse_goal_string(goal_string: str) -> dict:
     return result
 
 
-def targets_to_dict(targets: NutritionTargets) -> dict:
+def targets_to_dict(targets: NutritionTargets) -> dict[str, Any]:
     """Convert NutritionTargets to dict for JSON output."""
     return {
         "calories": {

@@ -33,7 +33,8 @@ def get_run_request(conn: Connection, run_id: int) -> dict[str, Any] | None:
         return None
 
     result_data = json.loads(run["result_json"])
-    return result_data.get("constraints_used")
+    constraints = result_data.get("constraints_used")
+    return constraints if isinstance(constraints, dict) else None
 
 
 def parse_constraint_modifier(

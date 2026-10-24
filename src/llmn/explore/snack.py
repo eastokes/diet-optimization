@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.sparse import csc_matrix  # type: ignore[import-untyped]
+from scipy.sparse import csc_matrix
 
 from llmn.data.food_categories import FoodCategory, classify_food
 from llmn.export.llm_prompt import clean_food_name_with_context

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 from enum import Enum
+from typing import Any
 
 
 class FoodCategory(Enum):
@@ -238,7 +239,7 @@ def get_foods_by_category(
     category: FoodCategory,
     tag: str | None = None,
     limit: int = 50,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get foods that belong to a specific category.
 
     Args:

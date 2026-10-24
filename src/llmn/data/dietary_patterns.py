@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -497,7 +498,7 @@ def get_pattern(name: str) -> DietaryPattern | None:
     return DIETARY_PATTERNS.get(normalized)
 
 
-def list_patterns() -> list[dict]:
+def list_patterns() -> list[dict[str, Any]]:
     """List all available dietary patterns.
 
     Returns:

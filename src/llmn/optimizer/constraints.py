@@ -5,13 +5,17 @@ from __future__ import annotations
 import random
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
 
 from llmn.data.nutrient_ids import get_nutrient_id
 from llmn.data.quality import detect_incomplete_foods, format_quality_warnings
+
+if TYPE_CHECKING:
+    from llmn.optimizer.multiperiod_models import MultiPeriodRequest
+
 from llmn.optimizer.models import (
     FoodConstraint,
     NutrientConstraint,
@@ -391,7 +395,7 @@ def load_profile_from_yaml(yaml_path: Path) -> OptimizationRequest:
     return request
 
 
-def deserialize_profile_json(data: dict) -> OptimizationRequest:
+def deserialize_profile_json(data: dict[str, Any]) -> OptimizationRequest:
     """Convert a JSON/dict profile into an OptimizationRequest.
 
     This is the dict-based equivalent of load_profile_from_yaml(),
@@ -480,7 +484,7 @@ def has_meals_section(yaml_path: Path) -> bool:
     return "meals" in data and isinstance(data.get("meals"), dict)
 
 
-def load_multiperiod_profile_from_yaml(yaml_path: Path):
+def load_multiperiod_profile_from_yaml(yaml_path: Path) -> MultiPeriodRequest:
     """Parse a YAML profile with meals section into MultiPeriodRequest.
 
     Example YAML format:

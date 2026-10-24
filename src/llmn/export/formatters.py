@@ -396,16 +396,16 @@ def format_result(
         Formatted string for json/markdown, None for table (prints directly)
     """
     if output_format == "table":
-        formatter = TableFormatter(console)
-        formatter.format(result, profile_name)
+        table_formatter = TableFormatter(console)
+        table_formatter.format(result, profile_name)
         return None
     elif output_format == "json":
-        formatter = JSONFormatter()
-        return formatter.format(
+        json_formatter = JSONFormatter()
+        return json_formatter.format(
             result, profile_name, run_id, request, data_quality_warnings, include_meal_allocation
         )
     elif output_format == "markdown":
-        formatter = MarkdownFormatter()
-        return formatter.format(result, profile_name)
+        markdown_formatter = MarkdownFormatter()
+        return markdown_formatter.format(result, profile_name)
     else:
         raise ValueError(f"Unknown output format: {output_format}")

@@ -23,12 +23,12 @@ class MealSlot:
     @property
     def total_calories(self) -> float:
         """Calculate total calories in this meal."""
-        return sum(f.get("calories", 0) for f in self.foods)
+        return float(sum(f.get("calories", 0) for f in self.foods))
 
     @property
     def total_protein(self) -> float:
         """Calculate total protein in this meal."""
-        return sum(f.get("protein", 0) for f in self.foods)
+        return float(sum(f.get("protein", 0) for f in self.foods))
 
 
 # Meal affinity based on food keywords
@@ -135,7 +135,7 @@ def allocate_to_meals(
     }
 
     # Build food info with affinity
-    food_info = []
+    food_info: list[dict[str, Any]] = []
     for f in foods:
         # Get calories from nutrients (nutrient_id 1008)
         calories = f.nutrients.get(1008, 0) * f.grams / 100 if f.nutrients else 0

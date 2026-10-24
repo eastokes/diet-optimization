@@ -10,6 +10,7 @@ MUCH smaller problem (16-20 variables vs 300+) with slot-specific targets.
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 import numpy as np
 from scipy.sparse import csc_matrix, lil_matrix
@@ -102,7 +103,7 @@ def _optimize_quantities(
     template = request.template
 
     # Flatten selections into a list of (meal_idx, selection) pairs
-    food_list: list[tuple[int, int, SelectedMeal, any]] = []  # (var_idx, meal_idx, meal, selection)
+    food_list: list[tuple[int, int, SelectedMeal, Any]] = []  # (var_idx, meal_idx, meal, selection)
     var_idx = 0
     for meal_idx, meal in enumerate(selections):
         for selection in meal.selections:

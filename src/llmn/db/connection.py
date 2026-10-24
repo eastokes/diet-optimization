@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from llmn.db.schema import get_schema_sql
 
@@ -57,7 +58,7 @@ class DatabaseConnection:
             conn.executescript(get_schema_sql())
             migrate_schema(conn)
 
-    def execute_query(self, query: str, params: tuple = ()) -> list[sqlite3.Row]:
+    def execute_query(self, query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
         """Execute a query and return results.
 
         Args:
@@ -71,7 +72,7 @@ class DatabaseConnection:
             cursor = conn.execute(query, params)
             return cursor.fetchall()
 
-    def execute_many(self, query: str, params_list: list[tuple]) -> int:
+    def execute_many(self, query: str, params_list: list[tuple[Any, ...]]) -> int:
         """Execute a query with multiple parameter sets.
 
         Args:

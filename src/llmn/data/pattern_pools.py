@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import sqlite3
+from typing import Any
 
 from llmn.data.dietary_patterns import (
     DietaryPattern,
@@ -173,7 +174,7 @@ def _filter_by_nutrients(
         return []
 
     placeholders = ",".join("?" * len(food_ids))
-    params: list = list(food_ids)
+    params: list[Any] = list(food_ids)
 
     # Build query with nutrient filters
     query = f"""
@@ -241,7 +242,7 @@ def _query_foods_by_pattern(
             WHERE f.is_active = TRUE
         """
 
-    params: list = []
+    params: list[Any] = []
 
     # Add calorie range filters
     if min_calories_per_100g is not None:
@@ -345,7 +346,7 @@ def get_pattern_summary(
     conn: sqlite3.Connection,
     patterns: list[str],
     max_foods: int = 300,
-) -> dict:
+) -> dict[str, Any]:
     """Get a summary of what a pattern combination would produce.
 
     Returns category distribution and sample foods without building the full pool.
@@ -397,7 +398,7 @@ def list_excluded_foods(
     conn: sqlite3.Connection,
     patterns: list[str],
     limit: int = 20,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Show foods that would be excluded by the pattern.
 
     Useful for understanding what a pattern filters out.

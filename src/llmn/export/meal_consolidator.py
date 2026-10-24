@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from llmn.optimizer.multiperiod_models import MealResult, MultiPeriodResult
 
@@ -120,7 +121,7 @@ def consolidate_meal(
     true_fat = meal.total_fat
 
     # Group foods by base ingredient
-    groups: dict[str, list[tuple]] = {}  # base -> [(food, grams, cals, prot, carbs, fat)]
+    groups: dict[str, list[tuple[Any, ...]]] = {}  # base -> [(food, grams, cals, prot, carbs, fat)]
 
     for food in meal.foods:
         base = get_base_ingredient(food.description)
@@ -288,7 +289,7 @@ def format_consolidated_result(result: ConsolidatedResult) -> str:
     return "\n".join(lines)
 
 
-def consolidated_result_to_dict(result: ConsolidatedResult) -> dict:
+def consolidated_result_to_dict(result: ConsolidatedResult) -> dict[str, Any]:
     """Convert consolidated result to dict for JSON output."""
     return {
         "meals": {

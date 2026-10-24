@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from typing import Any
 
 # Maximum variance to prevent divergence after long gaps (200 kcal/day std)
 MAX_VARIANCE = 40000.0
@@ -150,7 +151,7 @@ class TDEEFilter:
         uncertainty = 1.96 * math.sqrt(self.variance)
         return adjusted, uncertainty
 
-    def get_state(self) -> dict:
+    def get_state(self) -> dict[str, Any]:
         """Return current filter state as dictionary."""
         return {
             "bias": self.bias,

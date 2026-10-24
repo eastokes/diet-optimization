@@ -1,5 +1,7 @@
 """SQLite database schema definitions."""
 
+import sqlite3
+
 SCHEMA_SQL = """
 -- Core food table (derived from USDA)
 CREATE TABLE IF NOT EXISTS foods (
@@ -235,7 +237,7 @@ def get_schema_sql() -> str:
     return SCHEMA_SQL
 
 
-def migrate_user_profiles_add_diet_columns(conn) -> bool:
+def migrate_user_profiles_add_diet_columns(conn: sqlite3.Connection) -> bool:
     """
     Add diet_type and diet_style columns to user_profiles if they don't exist.
 

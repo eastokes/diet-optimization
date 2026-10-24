@@ -201,7 +201,7 @@ def solve_qp(
     if success and x is not None:
         fun = float(0.5 * x @ P @ x + q @ x)
 
-    ret = {
+    ret: dict[str, Any] = {
         "success": success,
         "x": x,
         "fun": fun,
@@ -210,7 +210,7 @@ def solve_qp(
         "elapsed_seconds": elapsed,
     }
 
-    if return_kkt and success:
+    if return_kkt and success and x is not None:
         # qpsolvers returns:
         # - z: dual multipliers for inequality constraints (G @ x <= h)
         # - z_box: dual multipliers for box constraints (lb <= x <= ub)

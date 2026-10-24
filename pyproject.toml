@@ -42,3 +42,8 @@ select = ["E", "F", "I", "UP"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
+
+[[tool.mypy.overrides]]
+# Third-party packages that ship without type information.
+module = ["yaml", "pandas", "pandas.*", "scipy", "scipy.*"]
+ignore_missing_imports = true
