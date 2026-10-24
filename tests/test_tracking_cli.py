@@ -503,3 +503,80 @@ class TestWriteFeedbackAndListOutput:
         assert "-0.0" not in result.stdout
         assert "Trend change:" in result.stdout
         assert "Delta" not in result.stdout
+
+
+class TestProgressReportConsistency:
+    def test_progress_uses_one_window_for_weight_expenditure_and_intake(
+        self, cli_db: DatabaseConnection
+    ) -> None:
+        create_user()
+        start, as_of, dates = recent_dates(15)
+        run_json(
+            [
+                "goal",
+                "set",
+                "--mode",
+                "loss",
+                "--rate",
+                "-1.0",
+                "--target",
+                "165",
+                "--effective-from",
+                start.isoformat(),
+                "--json",
+            ]
+        )
+        seed_through_cli(start, len(dates))
+
+        payload = run_json(
+            ["tdee", "progress", "--as-of", as_of.isoformat(), "--days", "15", "--json"]
+        )
+        data = payload["data"]
+        analysis = data["analysis"]
+
+        assert data["window"]["days"] == 15
+        assert data["window"]["start"] == start.isoformat()
+        assert data["tdee"]["avg_actual_calories"] == pytest.approx(2000)
+        assert data["tdee"]["complete_intake_days"] == len(dates)
+        assert data["tdee"]["intake_coverage"] == pytest.approx(1.0)
+        assert data["weight"]["measured_rate_lbs_per_week"] == pytest.approx(
+            analysis["observed_rate_lbs_per_week"]
+        )
+        # The progress report must quote the same expenditure estimate that the
+        # shared analysis (and therefore tdee targets) uses.
+        assert data["tdee"]["mifflin_tdee"] == pytest.approx(
+            analysis["expenditure"]["mifflin_tdee"], abs=0.5
+        )
+        assert data["tdee"]["adjusted_tdee"] == pytest.approx(
+            analysis["expenditure"]["kcal_per_day"], abs=0.5
+        )
+        assert data["tdee"]["segments_used"] == analysis["expenditure"]["segments_used"]
+        assert data["tdee"]["expected_deficit"] == pytest.approx(
+            analysis["expenditure"]["kcal_per_day"] - 2000, abs=1
+        )
+        assert data["goal"]["rate_lbs_per_week"] == -1.0
+
+    def test_progress_human_output_labels_both_rates(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        start, as_of, dates = recent_dates(15)
+        run_json(
+            [
+                "goal",
+                "set",
+                "--mode",
+                "maintenance",
+                "--effective-from",
+                start.isoformat(),
+                "--json",
+            ]
+        )
+        seed_through_cli(start, len(dates))
+        result = runner.invoke(
+            app, ["tdee", "progress", "--as-of", as_of.isoformat(), "--days", "15"]
+        )
+        assert result.exit_code == 0
+        assert "EMA rate" in result.stdout
+        assert "Measured rate" in result.stdout
+        assert "least-squares over raw weights" in result.stdout
+        assert f"{start.isoformat()} to {as_of.isoformat()}" in result.stdout
+        assert "Coverage:" in result.stdout

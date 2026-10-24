@@ -117,13 +117,22 @@ For progress check requests:
 uv run llmn tdee progress
 ```
 
-This shows:
+This shows one window shared with `llmn tdee targets`:
 - Current weight vs EMA trend
-- Weekly rate of change (lbs/week)
-- Mifflin-St Jeor baseline TDEE
-- Learned TDEE adjustment (from Kalman filter)
-- Your estimated TDEE with uncertainty
-- Progress toward goal weight
+- EMA rate (trend endpoints, smoothed) **and** measured rate (least-squares
+  over raw weights); recommendations use the measured rate
+- Mifflin-St Jeor baseline at the calculation weight and activity level
+- Learned TDEE offset (from the Kalman filter) or `formula_only` fallback
+- Estimated TDEE with 95% uncertainty and the number of weekly segments used
+- Mean logged intake, its coverage, expected deficit, and implied deficit
+- Progress toward the dated goal weight at the measured rate
+
+Do not quote the EMA rate as the adaptive rate, and do not mix the intake mean
+of one window with the expenditure estimate of another. Report the window.
+
+Write feedback: `intake log` returns the stored row plus `replaced`/`previous`
+so a revision is confirmable, and `weight add` reports replacement, the previous
+measurement date, trend change, and how many later trends were rebuilt.
 
 ### Step 5: Update TDEE Estimate
 

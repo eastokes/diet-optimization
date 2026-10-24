@@ -3881,6 +3881,7 @@ def weight_trend(
                     "current_trend_lbs": round(report.current_trend, 1),
                     "trend_change_lbs": round(report.trend_change, 1),
                     "weekly_rate_lbs": round(report.weekly_rate, 2),
+                    "rate_basis": "ema_endpoints",
                     "implied_daily_deficit_kcal": round(report.implied_daily_deficit, 0),
                     "period_days": report.period_days,
                 },
@@ -4091,13 +4092,21 @@ def tdee_estimate(
         )
     else:
         console.print("[bold]Expenditure Estimate[/bold]")
+        console.print(
+            f"  Window: {analysis.window.start} to {analysis.window.end} "
+            f"({analysis.window.total_days} calendar days)"
+        )
         console.print(f"  Method: {estimate.method}")
-        console.print(f"  Mifflin-St Jeor baseline: {estimate.mifflin_tdee:.0f} kcal/day")
+        console.print(
+            f"  Mifflin-St Jeor baseline: {estimate.mifflin_tdee:.0f} kcal/day "
+            f"(at {estimate.calculation_weight_lbs:.1f} lbs, "
+            f"{estimate.activity_level})"
+        )
         if estimate.bias is not None:
             console.print(f"  Learned bias: {estimate.bias:+.0f} kcal/day")
         if estimate.kcal_per_day is not None:
             uncertainty = (
-                f" ± {estimate.uncertainty_95ci:.0f}"
+                f" \u00b1 {estimate.uncertainty_95ci:.0f}"
                 if estimate.uncertainty_95ci is not None
                 else ""
             )
@@ -4106,10 +4115,21 @@ def tdee_estimate(
                 f"{estimate.kcal_per_day:.0f}{uncertainty} kcal/day[/bold]"
             )
         console.print(f"  Calendar segments used: {estimate.segments_used}")
+        if estimate.intake.mean_kcal is not None:
+            console.print(
+                f"  Mean logged intake: {estimate.intake.mean_kcal:.0f} kcal/day over "
+                f"{estimate.intake.complete_days} complete day(s)"
+            )
         console.print(
             f"  Actual intake coverage: {estimate.intake.weighted_coverage:.0%} "
-            f"({estimate.intake.complete_days} complete days)"
+            f"of {analysis.window.total_days} day(s) "
+            f"({estimate.intake.measured_equivalent_days:.1f} measured-equivalent day(s))"
         )
+        if estimate.observed_rate_lbs_per_week is not None:
+            console.print(
+                f"  Measured rate: {estimate.observed_rate_lbs_per_week:+.2f} lbs/week "
+                "(least-squares over raw weights)"
+            )
         if analysis.reason_codes:
             console.print(f"  Reasons: {', '.join(analysis.reason_codes)}")
 
@@ -4256,11 +4276,11 @@ def tdee_progress(
     from datetime import date
 
     from llmn.tracking.diagnostics import (
+        build_progress_report,
         format_progress_report,
-        generate_progress_report,
     )
     from llmn.tracking.errors import TrackingError
-    from llmn.tracking.service import analyze, get_profile
+    from llmn.tracking.service import analyze
 
     command = "tdee progress"
     try:
@@ -4269,10 +4289,8 @@ def tdee_progress(
             raise TrackingError("FUTURE_DATE", "--as-of cannot be in the future.")
         db = get_db()
         with db.get_connection() as conn:
-            profile = get_profile(conn, user_id)
-            assert profile.user_id is not None
-            report = generate_progress_report(conn, profile.user_id, days, as_of=as_of)
             analysis = analyze(conn, user_id, as_of, days)
+            report = build_progress_report(conn, analysis)
     except (TrackingError, ValueError) as error:
         tracking_failure(command, error, json_output)
         return
@@ -4298,26 +4316,39 @@ def tdee_progress(
                 "success": True,
                 "command": command,
                 "data": {
+                    "window": report.window.to_dict(),
                     "weight": {
                         "current_weight": report.weight.current_weight,
                         "current_trend": report.weight.current_trend,
                         "trend_change": report.weight.trend_change,
-                        "weekly_rate": report.weight.weekly_rate,
-                        "implied_daily_deficit": report.weight.implied_daily_deficit,
+                        "ema_rate_lbs_per_week": round(report.weight.weekly_rate, 2),
+                        "ema_implied_daily_deficit": round(report.weight.implied_daily_deficit, 0),
+                        "measured_rate_lbs_per_week": (
+                            round(report.tdee.measured_rate_lbs_per_week, 2)
+                            if report.tdee.measured_rate_lbs_per_week is not None
+                            else None
+                        ),
                         "period_days": report.weight.period_days,
                     },
                     "tdee": {
+                        "method": report.tdee.method,
                         "mifflin_tdee": report.tdee.mifflin_tdee,
                         "tdee_bias": report.tdee.tdee_bias,
                         "adjusted_tdee": report.tdee.adjusted_tdee,
                         "uncertainty_95ci": report.tdee.uncertainty_95ci,
+                        "segments_used": report.tdee.segments_used,
+                        "calculation_weight_lbs": report.tdee.calculation_weight_lbs,
+                        "activity_level": report.tdee.activity_level,
                         "avg_actual_calories": report.tdee.avg_actual_calories,
-                        "avg_planned_calories": report.tdee.avg_actual_calories,
+                        "complete_intake_days": report.tdee.complete_intake_days,
+                        "estimated_intake_days": report.tdee.estimated_intake_days,
+                        "intake_coverage": round(report.tdee.weighted_coverage, 3),
+                        "window_days": report.tdee.window_days,
                         "expected_deficit": report.tdee.expected_deficit,
-                        "implied_deficit": report.tdee.implied_deficit,
-                    }
-                    if report.tdee
-                    else None,
+                        "measured_implied_deficit": report.tdee.implied_deficit_measured,
+                        "reason_codes": report.tdee.reason_codes,
+                    },
+                    "goal": report.goal.to_dict() if report.goal else None,
                     "goal_weight": report.goal_weight,
                     "remaining_lbs": report.remaining_lbs,
                     "weeks_to_goal": report.weeks_to_goal,
@@ -4334,6 +4365,8 @@ def tdee_progress(
         console.print()
         console.print(f"[bold]Assessment:[/bold] {analysis.recommendation.assessment}")
         console.print(f"  {analysis.recommendation.recommendation_text}")
+        if analysis.recommendation.target_kcal_per_day is not None:
+            console.print(f"  Target: {analysis.recommendation.target_kcal_per_day} kcal/day")
 
 
 @app.command("snack")

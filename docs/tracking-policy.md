@@ -115,11 +115,37 @@ of exact intake or metabolism:
 Unsupported goal rates are rejected with `UNSUPPORTED_GOAL_RATE` rather than
 silently clamped into an apparently endorsed plan.
 
+## Reporting and rate labels
+
+`tdee progress` is built from the same analysis object as `tdee targets`, so the
+window, intake summary, expenditure estimate, and goal in one report always
+agree. It previously mixed a persisted estimate, a 30-day intake mean, and a
+requested `--days` window in the same output.
+
+Two rates are reported and must not be conflated:
+
+| Label | Definition | Used for |
+| --- | --- | --- |
+| EMA rate | trend change between window endpoints, per week | Display only; smooths noise but lags in short windows |
+| Measured rate | least-squares slope over raw weights in the window | Recommendation math and implied deficit |
+
+The intake figure is labelled as the mean over logged complete days. It is not
+a whole-window average, and unknown days are never treated as zero. Coverage is
+printed with its measured-equivalent days so down-weighted estimated days are
+visible instead of looking like a counting bug.
+
 ## JSON and compatibility
 
 - New tracking payloads use `schema_version: 2`.
 - Missing numeric values are `null`, not zero.
 - Reason codes are stable uppercase strings.
+- `intake log` returns the stored row (`entry`) plus `replaced` and
+  `previous`, so a revision can be confirmed without a second read.
+- `weight add` returns `replaced`, `replaced_weight_lbs`,
+  `previous_measurement_date`, `trend_change_lbs`, `days_since_previous`, and
+  `later_entries_rebuilt`.
+- `tdee progress` keeps legacy `weight`/`tdee` keys while adding `window`,
+  `goal`, measured/EMA rate labels, and the full `analysis` payload.
 - `tdee targets` retains flat compatibility fields (`tdee`,
   `recommended_intake`, `protein_min`, `protein_max`) while adding the structured
   `recommendation` object and `recommendation_text`.
