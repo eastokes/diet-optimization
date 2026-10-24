@@ -8,11 +8,17 @@ from typing import Any
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 from llmn.db.connection import get_db
 from llmn.tracking.errors import TrackingError
-from llmn.tracking.estimation import AnalysisWindow, summarize_intake
-from llmn.tracking.models import ActivityPeriod, GoalPeriod, IntakeEntry
+from llmn.tracking.estimation import AnalysisWindow, IntakeSummary, summarize_intake
+from llmn.tracking.models import (
+    ActivityPeriod,
+    GoalPeriod,
+    IntakeEntry,
+    IntakeWriteResult,
+)
 from llmn.tracking.queries import ActivityQueries, GoalQueries, IntakeQueries
 from llmn.tracking.recommendations import GoalSpec, validate_goal
 from llmn.tracking.service import finite_or_raise, get_profile, resolve_goal
@@ -137,6 +143,64 @@ def _intake_to_dict(entry: IntakeEntry) -> dict[str, object]:
     }
 
 
+def _intake_write_to_dict(result: IntakeWriteResult) -> dict[str, object]:
+    previous: dict[str, object] | None = None
+    if result.replaced:
+        previous = {
+            "kcal": result.previous_kcal,
+            "quality": result.previous_quality,
+            "completeness": result.previous_completeness,
+            "revision": result.previous_revision,
+        }
+    return {
+        "entry": _intake_to_dict(result.entry),
+        "replaced": result.replaced,
+        "previous": previous,
+    }
+
+
+def _intake_log_feedback(result: IntakeWriteResult) -> list[str]:
+    entry = result.entry
+    lines = [
+        f"Logged {entry.kcal:.0f} kcal for {entry.date} "
+        f"({entry.kind}, {entry.completeness}, {entry.quality}; "
+        f"revision {entry.revision})."
+    ]
+    if result.replaced and result.previous_kcal is not None:
+        lines.append(
+            f"Replaced the earlier {result.previous_kcal:.0f} kcal entry "
+            f"({result.previous_quality}, revision {result.previous_revision})."
+        )
+    else:
+        lines.append(f"First {entry.kind} entry stored for {entry.date}.")
+    return lines
+
+
+def _coverage_lines(summary: IntakeSummary, entries: list[IntakeEntry]) -> list[str]:
+    actual = sum(1 for entry in entries if entry.kind == "actual")
+    planned = sum(1 for entry in entries if entry.kind == "planned")
+    legacy = sum(1 for entry in entries if entry.kind == "legacy_unclassified")
+    lines = [
+        f"Actual intake: {summary.complete_days} complete day(s), "
+        f"{summary.partial_days} partial, {summary.estimated_days} estimated "
+        f"({actual} actual entry(ies), {planned} planned, {legacy} legacy).",
+        f"Coverage: {summary.weighted_coverage:.0%} of {summary.window_days} calendar day(s).",
+        f"  {summary.measured_equivalent_days:.1f} measured-equivalent day(s) / "
+        f"{summary.window_days}; estimated days count half weight, partial days count "
+        "neither toward the mean nor the weight.",
+        f"  Unknown: {summary.unknown_days} day(s) have no actual intake and are not "
+        "counted as zero.",
+    ]
+    if summary.mean_kcal is not None:
+        lines.append(
+            f"Mean over logged complete days: {summary.mean_kcal:.0f} kcal/day "
+            "(not a whole-window average)."
+        )
+    else:
+        lines.append("Mean over logged complete days: none (no complete actual-intake days).")
+    return lines
+
+
 def _goal_to_dict(goal: GoalSpec) -> dict[str, object]:
     return goal.to_dict()
 
@@ -175,7 +239,7 @@ def intake_log(
         with db.get_connection() as conn:
             profile = get_profile(conn, user_id)
             assert profile.user_id is not None
-            entry = IntakeQueries.upsert(
+            result = IntakeQueries.upsert(
                 conn,
                 profile.user_id,
                 log_date,
@@ -196,11 +260,23 @@ def intake_log(
         )
         return
 
+    warnings: list[str] = []
+    if kind == "planned":
+        warnings.append(
+            "Planned intake is not consumed intake and is excluded from expenditure learning."
+        )
+    if quality == "estimated":
+        warnings.append(
+            "Estimated intake contributes half weight to coverage and expenditure learning."
+        )
+    feedback = _intake_log_feedback(result)
     _emit(
         command,
         json_output=json_output,
-        data={"entry": _intake_to_dict(entry)},
-        human_summary=f"Logged {calories:.0f} kcal ({kind}, {completeness}) for {log_date}.",
+        data=_intake_write_to_dict(result),
+        human_summary=feedback[0],
+        human_lines=feedback,
+        warnings=warnings,
     )
 
 
@@ -248,16 +324,46 @@ def intake_list(
         "entries": [_intake_to_dict(entry) for entry in entries],
         "coverage": summary.to_dict(),
     }
-    _emit(
-        command,
-        json_output=json_output,
-        data=data,
-        human_summary=(
-            f"{len(entries)} intake entries; actual coverage "
-            f"{summary.weighted_coverage:.0%} with "
-            f"{summary.complete_days} complete day(s)."
-        ),
+    if json_output:
+        _emit(
+            command,
+            json_output=True,
+            data=data,
+            human_summary=(
+                f"{len(entries)} intake entries; actual coverage "
+                f"{summary.weighted_coverage:.0%} "
+                f"({summary.complete_days} complete day(s))."
+            ),
+        )
+        return
+
+    console.print(
+        f"[bold]Intake entries[/bold] {window.start} \u2192 {window.end} "
+        f"({summary.window_days} calendar days)"
     )
+    if entries:
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("Date", style="cyan")
+        table.add_column("kcal", justify="right")
+        table.add_column("Kind")
+        table.add_column("Completeness")
+        table.add_column("Quality")
+        table.add_column("Rev", justify="right")
+        for entry in entries:
+            table.add_row(
+                entry.date.isoformat(),
+                f"{entry.kcal:.0f}",
+                entry.kind,
+                entry.completeness,
+                entry.quality,
+                str(entry.revision),
+            )
+        console.print(table)
+    else:
+        console.print("No intake entries in this window.")
+    console.print()
+    for line in _coverage_lines(summary, entries):
+        console.print(line, soft_wrap=True)
 
 
 @intake_app.command("delete")

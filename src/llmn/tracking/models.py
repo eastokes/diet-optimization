@@ -68,6 +68,41 @@ class WeightEntry:
 
 
 @dataclass
+class WeightWriteResult:
+    """Outcome of writing a weight measurement.
+
+    A weight write can replace an existing row for the same date and always
+    rebuilds later stored trends, so callers get enough context to report what
+    changed instead of only the new value.
+    """
+
+    entry: WeightEntry
+    replaced: bool = False
+    replaced_weight_lbs: float | None = None
+    previous_entry: WeightEntry | None = None
+    next_entry: WeightEntry | None = None
+    later_entry_count: int = 0
+
+    @property
+    def trend_change_lbs(self) -> float | None:
+        """Trend change relative to the previous measurement date."""
+        if self.previous_entry is None:
+            return None
+        return self.entry.trend_lbs - self.previous_entry.trend_lbs
+
+    @property
+    def days_since_previous(self) -> int | None:
+        if self.previous_entry is None:
+            return None
+        return (self.entry.measured_at - self.previous_entry.measured_at).days
+
+    @property
+    def later_entries_rebuilt(self) -> int:
+        """Number of later rows whose stored trend was recomputed."""
+        return self.later_entry_count
+
+
+@dataclass
 class CalorieEntry:
     """A legacy planned-calorie log entry."""
 
@@ -109,6 +144,18 @@ class IntakeEntry:
             )
         if self.quality not in VALID_QUALITY:
             raise ValueError(f"quality must be one of {VALID_QUALITY}, got '{self.quality}'")
+
+
+@dataclass
+class IntakeWriteResult:
+    """Outcome of writing an intake observation, including what it replaced."""
+
+    entry: IntakeEntry
+    replaced: bool = False
+    previous_kcal: float | None = None
+    previous_quality: str | None = None
+    previous_completeness: str | None = None
+    previous_revision: int | None = None
 
 
 @dataclass

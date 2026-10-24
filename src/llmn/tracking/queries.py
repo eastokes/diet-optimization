@@ -12,9 +12,11 @@ from llmn.tracking.models import (
     CalorieEntry,
     GoalPeriod,
     IntakeEntry,
+    IntakeWriteResult,
     TDEEEstimate,
     UserProfile,
     WeightEntry,
+    WeightWriteResult,
 )
 
 
@@ -164,8 +166,47 @@ class WeightQueries:
         notes: str | None = None,
     ) -> WeightEntry:
         """Add or replace a weight entry, then rebuild all later trends."""
+        return WeightQueries.upsert_weight(conn, user_id, weight_lbs, measured_at, notes).entry
+
+    @staticmethod
+    def get_entry_on(
+        conn: sqlite3.Connection, user_id: int, measured_at: date
+    ) -> WeightEntry | None:
+        """Return the stored measurement for an exact date, if any."""
+        row = conn.execute(
+            """
+            SELECT log_id, user_id, weight_lbs, trend_lbs, measured_at, notes
+            FROM weight_log
+            WHERE user_id = ? AND measured_at = ?
+            """,
+            (user_id, measured_at.isoformat()),
+        ).fetchone()
+        if row is None:
+            return None
+        return WeightEntry(
+            log_id=row[0],
+            user_id=row[1],
+            weight_lbs=row[2],
+            trend_lbs=row[3],
+            measured_at=date.fromisoformat(row[4]),
+            notes=row[5],
+        )
+
+    @staticmethod
+    def upsert_weight(
+        conn: sqlite3.Connection,
+        user_id: int,
+        weight_lbs: float,
+        measured_at: date,
+        notes: str | None = None,
+    ) -> WeightWriteResult:
+        """Add or replace a weight entry and report exactly what changed."""
         if not math.isfinite(weight_lbs) or weight_lbs <= 0:
             raise ValueError("weight_lbs must be a finite, positive number")
+        existing = WeightQueries.get_entry_on(conn, user_id, measured_at)
+        previous_entry = WeightQueries.get_latest_weight_on_or_before(
+            conn, user_id, measured_at - timedelta(days=1)
+        )
         conn.execute(
             """
             INSERT INTO weight_log (user_id, weight_lbs, trend_lbs, measured_at, notes)
@@ -179,23 +220,45 @@ class WeightQueries:
         WeightQueries._recompute_trends(conn, user_id)
         conn.commit()
 
-        row = conn.execute(
+        entry = WeightQueries.get_entry_on(conn, user_id, measured_at)
+        assert entry is not None
+
+        next_row = conn.execute(
             """
             SELECT log_id, user_id, weight_lbs, trend_lbs, measured_at, notes
             FROM weight_log
-            WHERE user_id = ? AND measured_at = ?
+            WHERE user_id = ? AND measured_at > ?
+            ORDER BY measured_at LIMIT 1
             """,
             (user_id, measured_at.isoformat()),
         ).fetchone()
-        assert row is not None
+        next_entry = (
+            WeightEntry(
+                log_id=next_row[0],
+                user_id=next_row[1],
+                weight_lbs=next_row[2],
+                trend_lbs=next_row[3],
+                measured_at=date.fromisoformat(next_row[4]),
+                notes=next_row[5],
+            )
+            if next_row is not None
+            else None
+        )
 
-        return WeightEntry(
-            log_id=row[0],
-            user_id=row[1],
-            weight_lbs=row[2],
-            trend_lbs=row[3],
-            measured_at=date.fromisoformat(row[4]),
-            notes=row[5],
+        later_count = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM weight_log WHERE user_id = ? AND measured_at > ?",
+                (user_id, measured_at.isoformat()),
+            ).fetchone()[0]
+        )
+
+        return WeightWriteResult(
+            entry=entry,
+            replaced=existing is not None,
+            replaced_weight_lbs=existing.weight_lbs if existing is not None else None,
+            previous_entry=previous_entry,
+            next_entry=next_entry,
+            later_entry_count=later_count,
         )
 
     @staticmethod
@@ -435,6 +498,20 @@ class IntakeQueries:
         )
 
     @staticmethod
+    def get_entry(
+        conn: sqlite3.Connection,
+        user_id: int,
+        log_date: date,
+        kind: str = "actual",
+    ) -> IntakeEntry | None:
+        """Return the stored observation for an exact date and kind, if any."""
+        row = conn.execute(
+            IntakeQueries._SELECT + " WHERE user_id = ? AND date = ? AND kind = ?",
+            (user_id, log_date.isoformat(), kind),
+        ).fetchone()
+        return IntakeQueries._from_row(row) if row is not None else None
+
+    @staticmethod
     def upsert(
         conn: sqlite3.Connection,
         user_id: int,
@@ -445,7 +522,7 @@ class IntakeQueries:
         quality: str = "measured",
         provenance: str = "manual",
         notes: str | None = None,
-    ) -> IntakeEntry:
+    ) -> IntakeWriteResult:
         """Insert or revise an intake observation for a date and kind."""
         # Validate through the model before writing.
         IntakeEntry(
@@ -459,6 +536,7 @@ class IntakeQueries:
             provenance=provenance,
             notes=notes,
         )
+        existing = IntakeQueries.get_entry(conn, user_id, log_date, kind)
 
         conn.execute(
             """
@@ -492,7 +570,15 @@ class IntakeQueries:
             (user_id, log_date.isoformat(), kind),
         ).fetchone()
         assert row is not None
-        return IntakeQueries._from_row(row)
+        entry = IntakeQueries._from_row(row)
+        return IntakeWriteResult(
+            entry=entry,
+            replaced=existing is not None,
+            previous_kcal=existing.kcal if existing is not None else None,
+            previous_quality=existing.quality if existing is not None else None,
+            previous_completeness=existing.completeness if existing is not None else None,
+            previous_revision=existing.revision if existing is not None else None,
+        )
 
     @staticmethod
     def get_entries(

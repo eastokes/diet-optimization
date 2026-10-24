@@ -3635,27 +3635,63 @@ def weight_add(
         with db.get_connection() as conn:
             profile = get_profile(conn, user_id)
             assert profile.user_id is not None
-            entry = WeightQueries.add_weight(conn, profile.user_id, weight, measured_at, notes)
+            result = WeightQueries.upsert_weight(conn, profile.user_id, weight, measured_at, notes)
     except (TrackingError, ValueError) as error:
         tracking_failure(command, error, json_output)
         return
+
+    entry = result.entry
+    previous = result.previous_entry
+    data: dict[str, Any] = {
+        "measured_at": entry.measured_at.isoformat(),
+        "weight_lbs": entry.weight_lbs,
+        "trend_lbs": round(entry.trend_lbs, 2),
+        "replaced": result.replaced,
+        "replaced_weight_lbs": result.replaced_weight_lbs,
+        "previous_measurement_date": (
+            previous.measured_at.isoformat() if previous is not None else None
+        ),
+        "previous_trend_lbs": (round(previous.trend_lbs, 2) if previous is not None else None),
+        "trend_change_lbs": (
+            round(result.trend_change_lbs, 2) if result.trend_change_lbs is not None else None
+        ),
+        "days_since_previous": result.days_since_previous,
+        "later_entries_rebuilt": result.later_entries_rebuilt,
+    }
+    summary = f"Logged {weight:.1f} lbs on {measured_at}, trend {entry.trend_lbs:.1f} lbs"
+    if result.replaced:
+        summary += f" (replaced {result.replaced_weight_lbs:.1f} lbs)"
 
     if json_output:
         output_json(
             {
                 "success": True,
                 "command": command,
-                "data": {
-                    "weight_lbs": entry.weight_lbs,
-                    "trend_lbs": round(entry.trend_lbs, 1),
-                    "measured_at": entry.measured_at.isoformat(),
-                },
-                "human_summary": f"Logged {weight:.1f} lbs, trend: {entry.trend_lbs:.1f} lbs",
+                "data": data,
+                "human_summary": summary,
             }
         )
+        return
+
+    console.print(f"[green]Logged:[/green] {entry.weight_lbs:.1f} lbs on {entry.measured_at}")
+    if result.replaced and result.replaced_weight_lbs is not None:
+        console.print(
+            f"  Replaced the earlier {result.replaced_weight_lbs:.1f} lbs "
+            "entry for that date and rebuilt later trends."
+        )
+        if result.later_entries_rebuilt:
+            console.print(f"  Later entries whose trend changed: {result.later_entries_rebuilt}")
+    console.print(f"[blue]Trend:[/blue] {entry.trend_lbs:.1f} lbs (EMA)")
+    if previous is not None and result.trend_change_lbs is not None:
+        change = result.trend_change_lbs
+        change_text = "0.00" if abs(change) < 0.005 else f"{change:+.2f}"
+        console.print(
+            f"  Change since {previous.measured_at} "
+            f"({result.days_since_previous} day(s) ago): "
+            f"{change_text} lbs ({previous.trend_lbs:.1f} lbs trend)"
+        )
     else:
-        console.print(f"[green]Logged:[/green] {weight:.1f} lbs on {measured_at}")
-        console.print(f"[blue]Trend:[/blue] {entry.trend_lbs:.1f} lbs (EMA)")
+        console.print("  This is the first weight measurement; the trend starts here.")
 
 
 @weight_app.command("delete")
@@ -3736,6 +3772,10 @@ def weight_list(
             console.print("No weight entries found")
         return
 
+    span_days = (history[-1].measured_at - history[0].measured_at).days
+    trend_change = history[-1].trend_lbs - history[0].trend_lbs
+    ema_rate = trend_change / span_days * 7 if span_days else None
+
     if json_output:
         output_json(
             {
@@ -3746,37 +3786,56 @@ def weight_list(
                         {
                             "date": e.measured_at.isoformat(),
                             "weight_lbs": e.weight_lbs,
-                            "trend_lbs": round(e.trend_lbs, 1),
+                            "trend_lbs": round(e.trend_lbs, 2),
                         }
                         for e in history
-                    ]
+                    ],
+                    "summary": {
+                        "observations": len(history),
+                        "span_days": span_days,
+                        "trend_change_lbs": round(trend_change, 2),
+                        "ema_rate_lbs_per_week": (
+                            round(ema_rate, 2) if ema_rate is not None else None
+                        ),
+                    },
                 },
-                "human_summary": f"{len(history)} entries over {days} days",
+                "human_summary": (
+                    f"{len(history)} entries over {span_days} days, trend {trend_change:+.1f} lbs"
+                ),
             }
         )
+        return
+
+    table = Table(title=f"Weight History (last {days} days)")
+    table.add_column("Date", style="cyan")
+    table.add_column("Weight", justify="right")
+    table.add_column("Trend", justify="right", style="blue")
+    table.add_column("Δ trend", justify="right")
+
+    prev_trend: float | None = None
+    for entry in history:
+        delta = ""
+        if prev_trend is not None:
+            change = entry.trend_lbs - prev_trend
+            # Avoid the misleading "-0.0" for sub-0.05 lb changes.
+            delta = "0.00" if abs(change) < 0.005 else f"{change:+.2f}"
+        prev_trend = entry.trend_lbs
+
+        table.add_row(
+            entry.measured_at.isoformat(),
+            f"{entry.weight_lbs:.1f}",
+            f"{entry.trend_lbs:.1f}",
+            delta,
+        )
+
+    console.print(table)
+    if ema_rate is None:
+        console.print("\n[dim]One measurement in this window; no rate yet.[/dim]")
     else:
-        table = Table(title=f"Weight History (last {days} days)")
-        table.add_column("Date", style="cyan")
-        table.add_column("Weight", justify="right")
-        table.add_column("Trend", justify="right", style="blue")
-        table.add_column("Δ", justify="right")
-
-        prev_trend = None
-        for entry in history:
-            delta = ""
-            if prev_trend is not None:
-                d = entry.trend_lbs - prev_trend
-                delta = f"{d:+.1f}"
-            prev_trend = entry.trend_lbs
-
-            table.add_row(
-                entry.measured_at.isoformat(),
-                f"{entry.weight_lbs:.1f}",
-                f"{entry.trend_lbs:.1f}",
-                delta,
-            )
-
-        console.print(table)
+        console.print(
+            f"\nTrend change: {trend_change:+.2f} lbs over {span_days} days "
+            f"({ema_rate:+.2f} lbs/week, EMA endpoints)"
+        )
 
 
 @weight_app.command("trend")

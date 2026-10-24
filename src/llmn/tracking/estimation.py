@@ -54,15 +54,32 @@ class IntakeSummary:
     weighted_coverage: float
     latest_date: date | None
     legacy_unclassified_days: int
+    window_days: int = 0
+    measured_equivalent_days: float = 0.0
+
+    @property
+    def coverage_explanation(self) -> str:
+        """Plain-language statement of how coverage was computed."""
+        if not self.window_days:
+            return "Coverage needs a calendar window."
+        return (
+            f"{self.measured_equivalent_days:.1f} measured-equivalent logged day(s) "
+            f"/ {self.window_days} calendar day(s); estimated days count half weight, "
+            "partial days count for neither the mean nor the weight"
+        )
 
     def to_dict(self) -> dict[str, object]:
         return {
             "mean_kcal_per_day": _round(self.mean_kcal, 0),
+            "mean_kcal_basis": "mean of logged complete actual-intake days",
             "complete_days": self.complete_days,
             "partial_days": self.partial_days,
             "estimated_days": self.estimated_days,
             "unknown_days": self.unknown_days,
             "weighted_coverage": round(self.weighted_coverage, 3),
+            "measured_equivalent_days": round(self.measured_equivalent_days, 2),
+            "window_days": self.window_days,
+            "coverage_explanation": self.coverage_explanation,
             "latest_intake_date": self.latest_date.isoformat() if self.latest_date else None,
             "legacy_unclassified_days": self.legacy_unclassified_days,
         }
@@ -243,6 +260,8 @@ def summarize_intake(
         weighted_coverage=weighted_coverage,
         latest_date=latest,
         legacy_unclassified_days=legacy_days,
+        window_days=total_days,
+        measured_equivalent_days=weight_total,
     )
 
 

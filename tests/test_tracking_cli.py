@@ -378,3 +378,128 @@ class TestCorrectionsAndMigrationCLI:
         assert planned[0].kcal == 1850
         assert planned[0].quality == "estimated"
         assert goals == []
+
+
+class TestWriteFeedbackAndListOutput:
+    def test_intake_log_reports_revision_and_replacement(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        start, _, _ = recent_dates(5)
+
+        first = run_json(["intake", "log", "2000", "--date", start.isoformat(), "--json"])
+        assert first["data"]["replaced"] is False
+        assert first["data"]["previous"] is None
+        assert first["data"]["entry"]["revision"] == 1
+
+        replaced = run_json(
+            [
+                "intake",
+                "log",
+                "2100",
+                "--date",
+                start.isoformat(),
+                "--quality",
+                "estimated",
+                "--json",
+            ]
+        )
+        data = replaced["data"]
+        assert data["replaced"] is True
+        assert data["previous"] == {
+            "kcal": 2000.0,
+            "quality": "measured",
+            "completeness": "complete",
+            "revision": 1,
+        }
+        assert data["entry"]["kcal"] == 2100.0
+        assert data["entry"]["quality"] == "estimated"
+        assert data["entry"]["revision"] == 2
+        assert any("half weight" in warning for warning in replaced["warnings"])
+
+    def test_intake_log_human_output_names_the_replacement(
+        self, cli_db: DatabaseConnection
+    ) -> None:
+        create_user()
+        start, _, _ = recent_dates(5)
+        runner.invoke(app, ["intake", "log", "2000", "--date", start.isoformat()])
+        result = runner.invoke(app, ["intake", "log", "2100", "--date", start.isoformat()])
+        assert result.exit_code == 0
+        assert "revision 2" in result.stdout
+        assert "Replaced the earlier 2000 kcal entry" in result.stdout
+
+    def test_intake_list_explains_weighted_coverage(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        start, as_of, _ = recent_dates(10)
+        run_json(["intake", "log", "2000", "--date", start.isoformat(), "--json"])
+        run_json(
+            [
+                "intake",
+                "log",
+                "2100",
+                "--date",
+                (start + timedelta(days=1)).isoformat(),
+                "--quality",
+                "estimated",
+                "--json",
+            ]
+        )
+
+        payload = run_json(
+            ["intake", "list", "--as-of", as_of.isoformat(), "--days", "10", "--json"]
+        )
+        coverage = payload["data"]["coverage"]
+        assert coverage["window_days"] == 10
+        assert coverage["measured_equivalent_days"] == pytest.approx(1.5)
+        assert coverage["weighted_coverage"] == pytest.approx(0.15)
+        assert coverage["estimated_days"] == 1
+        assert "measured-equivalent" in coverage["coverage_explanation"]
+        assert coverage["mean_kcal_basis"].startswith("mean of logged")
+
+        human = runner.invoke(app, ["intake", "list", "--as-of", as_of.isoformat(), "--days", "10"])
+        assert human.exit_code == 0
+        assert "1.5 measured-equivalent day(s)" in human.stdout
+        assert "not counted as zero" in human.stdout
+        assert "Mean over logged complete days" in human.stdout
+        assert start.isoformat() in human.stdout
+
+    def test_weight_add_reports_replacement_and_rebuilds(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        start, _, _ = recent_dates(5)
+        days = [start + timedelta(days=index) for index in range(3)]
+        run_json(["weight", "add", "185", "--date", days[0].isoformat(), "--json"])
+        run_json(["weight", "add", "184", "--date", days[1].isoformat(), "--json"])
+        run_json(["weight", "add", "183", "--date", days[2].isoformat(), "--json"])
+
+        replaced = run_json(["weight", "add", "184.5", "--date", days[1].isoformat(), "--json"])
+        data = replaced["data"]
+        assert data["replaced"] is True
+        assert data["replaced_weight_lbs"] == pytest.approx(184.0)
+        assert data["previous_measurement_date"] == days[0].isoformat()
+        assert data["days_since_previous"] == 1
+        assert data["trend_change_lbs"] == pytest.approx(-0.05, abs=0.01)
+        assert data["later_entries_rebuilt"] == 1
+
+        backfill = run_json(["weight", "add", "184.2", "--date", days[0].isoformat(), "--json"])
+        assert backfill["data"]["replaced"] is True
+        assert backfill["data"]["previous_measurement_date"] is None
+        assert backfill["data"]["later_entries_rebuilt"] == 2
+
+    def test_weight_list_avoids_negative_zero_delta(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        start, _, _ = recent_dates(4)
+        for index, weight in enumerate([185.0, 185.02, 185.04]):
+            run_json(
+                [
+                    "weight",
+                    "add",
+                    f"{weight:.2f}",
+                    "--date",
+                    (start + timedelta(days=index)).isoformat(),
+                    "--json",
+                ]
+            )
+
+        result = runner.invoke(app, ["weight", "list", "--days", "10"])
+        assert result.exit_code == 0
+        assert "-0.0" not in result.stdout
+        assert "Trend change:" in result.stdout
+        assert "Delta" not in result.stdout
