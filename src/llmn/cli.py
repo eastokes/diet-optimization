@@ -3989,5 +3989,132 @@ def tdee_progress(
         console.print(f"  {analysis.recommendation.recommendation_text}")
 
 
+@app.command("snack")
+def snack(
+    calories: float = typer.Option(
+        ..., "--calories", "-c", help="Remaining calories to target"
+    ),
+    protein: float = typer.Option(
+        0.0, "--protein", "-p", help="Minimum protein grams"
+    ),
+    max_carbs: Optional[float] = typer.Option(
+        None, "--max-carbs", help="Maximum carbohydrate grams"
+    ),
+    max_fat: Optional[float] = typer.Option(
+        None, "--max-fat", help="Maximum fat grams"
+    ),
+    calorie_tolerance: float = typer.Option(
+        30.0, "--calorie-tolerance", help="Allowed calorie deviation in kcal"
+    ),
+    max_foods: int = typer.Option(
+        3, "--max-foods", help="Maximum foods per suggestion (1-3)"
+    ),
+    limit: int = typer.Option(
+        3, "--limit", "-n", help="Number of suggestions to return"
+    ),
+    tag: Optional[str] = typer.Option(
+        None, "--tag", help="Only use foods with this tag (for example: staple)"
+    ),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Suggest complementary food combinations for remaining macros."""
+    from llmn.explore.snack import (
+        SnackRequest,
+        action_suggestions,
+        format_suggestion,
+        human_summary,
+        suggest_snacks,
+        validate_request,
+    )
+
+    command = "snack"
+    try:
+        request = SnackRequest(
+            calories=calories,
+            protein_min=protein,
+            max_carbs=max_carbs,
+            max_fat=max_fat,
+            calorie_tolerance=calorie_tolerance,
+            max_foods=max_foods,
+            limit=limit,
+            include_tag=tag,
+        )
+        validate_request(request)
+    except ValueError as error:
+        if json_output:
+            output_json({
+                "success": False,
+                "command": command,
+                "data": {},
+                "errors": [str(error)],
+                "warnings": [],
+                "suggestions": [],
+                "human_summary": f"Error: {error}",
+            })
+        else:
+            console.print(f"[red]{error}[/red]")
+        raise typer.Exit(1)
+
+    db = get_db()
+    if not db.table_exists("foods") or db.get_table_count("foods") == 0:
+        message = "Database not initialized with food data."
+        if json_output:
+            output_json({
+                "success": False,
+                "command": command,
+                "data": {},
+                "errors": [message],
+                "warnings": [],
+                "suggestions": ["Run: llmn init <path-to-usda-csv>"],
+                "human_summary": f"Error: {message}",
+            })
+        else:
+            console.print(f"[red]{message}[/red]")
+            console.print("Run: [cyan]llmn init <path-to-usda-csv>[/cyan]")
+        raise typer.Exit(1)
+
+    with db.get_connection() as conn:
+        result = suggest_snacks(conn, request)
+
+    if json_output:
+        output_json({
+            "success": True,
+            "command": command,
+            "data": result.to_dict(),
+            "errors": [],
+            "warnings": list(result.warnings),
+            "suggestions": action_suggestions(result),
+            "human_summary": human_summary(result),
+        })
+        return
+
+    if not result.suggestions:
+        console.print("[yellow]No snack combination matched those targets.[/yellow]")
+        for suggestion in action_suggestions(result):
+            console.print(f"  - {suggestion}")
+        return
+
+    console.print(
+        f"[bold]Snack suggestions[/bold] for {request.calories:.0f} kcal, "
+        f"≥{request.protein_min:.0f} g protein"
+        + (
+            f", ≤{request.max_carbs:.0f} g carbs"
+            if request.max_carbs is not None
+            else ""
+        )
+        + (f", ≤{request.max_fat:.0f} g fat" if request.max_fat is not None else "")
+    )
+    for index, suggestion in enumerate(result.suggestions, start=1):
+        console.print()
+        for line in format_suggestion(index, suggestion):
+            console.print(line, soft_wrap=True)
+    if request.include_tag is None:
+        console.print()
+        console.print(
+            "[dim]Tip: use --tag staple to limit suggestions to your curated "
+            "everyday foods.[/dim]"
+        )
+
+
 if __name__ == "__main__":
     app()

@@ -236,10 +236,23 @@ class USDALoader:
         for _, row in df.iterrows():
             gram_weight = row.get("gram_weight")
             portion_desc = row.get("portion_description")
+            modifier = row.get("modifier")
+            amount = row.get("amount")
 
-            # Skip if missing essential data
-            if pd.isna(gram_weight) or pd.isna(portion_desc):
+            # USDA often leaves portion_description empty and puts the measure
+            # in modifier/amount (for example amount=3, modifier="oz").
+            if (pd.isna(portion_desc) or not str(portion_desc).strip()) and pd.notna(
+                modifier
+            ):
+                modifier_text = str(modifier).strip()
+                if pd.notna(amount):
+                    amount_text = f"{float(amount):g}"
+                    portion_desc = f"{amount_text} {modifier_text}"
+                else:
+                    portion_desc = modifier_text
+            if pd.isna(portion_desc) or not str(portion_desc).strip():
                 continue
+            portion_desc = str(portion_desc).strip()
 
             # Skip if gram_weight is not a valid positive number
             try:

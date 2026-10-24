@@ -64,6 +64,18 @@ class TestFoodClassification:
         )
         assert category == FoodCategory.LEGUME
 
+    def test_coffee_beans_are_not_legumes(self):
+        """Coffee/cocoa beans are not legumes despite the word 'bean'."""
+        category = classify_food(
+            protein_per_100g=4,
+            carbs_per_100g=60,
+            fat_per_100g=20,
+            fiber_per_100g=5,
+            energy_per_100g=450,
+            description="Candies, dark chocolate coated coffee beans",
+        )
+        assert category != FoodCategory.LEGUME
+
     def test_classify_fruit(self):
         """Test classifying fruits (carbs, low fat, low protein)."""
         # Apple: ~0.3g protein, ~14g carbs, ~0.2g fat, 2.4g fiber per 100g

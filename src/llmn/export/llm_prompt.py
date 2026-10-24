@@ -122,7 +122,7 @@ def clean_food_name_with_context(description: str) -> tuple[str, str]:
         prep_state = "canned"
     elif "cooked" in desc_lower or "boiled" in desc_lower:
         prep_state = "cooked"
-    elif "raw" in desc_lower or "fresh" in desc_lower:
+    elif re.search(r"\braw\b", desc_lower) or re.search(r"\bfresh\b", desc_lower):
         prep_state = "raw"
 
     # Get the clean name using the existing function
