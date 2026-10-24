@@ -29,8 +29,8 @@ def test_fresh_schema_records_all_versions(temp_db: DatabaseConnection) -> None:
             row[1] for row in conn.execute("PRAGMA table_info(tdee_estimates)").fetchall()
         }
 
-    assert versions == [1, 2, 3, 4]
-    assert {"intake_log", "goal_periods", "activity_periods"} <= tables
+    assert versions == [1, 2, 3, 4, 5]
+    assert {"intake_log", "goal_periods", "activity_periods", "body_composition"} <= tables
     assert {"birthdate", "resting_metabolic_rate", "rmr_measured_at", "rmr_source"} <= (
         profile_columns
     )

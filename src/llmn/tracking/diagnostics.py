@@ -17,11 +17,17 @@ from dataclasses import dataclass
 from datetime import date
 
 from llmn.tracking import policy
+from llmn.tracking.bodycomp import (
+    BodyCompDelta,
+    compare_compositions,
+    latest_scan,
+    select_comparison,
+)
 from llmn.tracking.ema import estimate_daily_calorie_balance, estimate_weekly_change
 from llmn.tracking.estimation import AnalysisWindow
 from llmn.tracking.formula import mifflin_tdee_at_weight
-from llmn.tracking.models import UserProfile
-from llmn.tracking.queries import WeightQueries
+from llmn.tracking.models import BodyComposition, UserProfile
+from llmn.tracking.queries import BodyCompositionQueries, WeightQueries
 from llmn.tracking.recommendations import GoalSpec
 from llmn.tracking.service import TrackingAnalysis
 
@@ -77,6 +83,8 @@ class ProgressReport:
     remaining_lbs: float | None
     weeks_to_goal: float | None
     notes: list[str]
+    latest_composition: BodyComposition | None = None
+    body_comp_delta: BodyCompDelta | None = None
 
 
 def calculate_mifflin_tdee(profile: UserProfile) -> float:
@@ -222,7 +230,26 @@ def build_progress_report(
             elif remaining_lbs < 0 and rate_for_projection > 0:
                 weeks_to_goal = abs(remaining_lbs) / rate_for_projection
 
+    compositions = BodyCompositionQueries.get_entries(
+        conn, analysis.profile.user_id, end_date=window.end
+    )
+    comparison = select_comparison(compositions)
+    latest_composition = latest_scan(compositions)
+    body_comp_delta = compare_compositions(*comparison) if comparison is not None else None
+
     notes = _progress_notes(weight_report, tdee_report, goal)
+    if (
+        latest_composition is not None
+        and latest_composition.weight_lbs is not None
+        and abs(latest_composition.weight_lbs - weight_report.current_trend) > 2.0
+    ):
+        notes.append(
+            f"Body-composition scan weight ({latest_composition.weight_lbs:.1f} lbs on "
+            f"{latest_composition.measured_at}) differs from the current scale trend "
+            f"({weight_report.current_trend:.1f} lbs). Methods differ; do not treat the "
+            "difference as a body change."
+        )
+
     return ProgressReport(
         weight=weight_report,
         tdee=tdee_report,
@@ -232,6 +259,8 @@ def build_progress_report(
         remaining_lbs=remaining_lbs,
         weeks_to_goal=weeks_to_goal,
         notes=notes,
+        latest_composition=latest_composition,
+        body_comp_delta=body_comp_delta,
     )
 
 
@@ -423,6 +452,9 @@ def format_progress_report(report: ProgressReport) -> str:
                 "from the target)"
             )
 
+    if report.latest_composition is not None:
+        parts.extend(_format_body_comp(report))
+
     if report.notes:
         parts.append("")
         parts.append("Notes:")
@@ -430,3 +462,35 @@ def format_progress_report(report: ProgressReport) -> str:
             parts.append(f"  - {note}")
 
     return "\n".join(parts)
+
+
+def _format_body_comp(report: ProgressReport) -> list[str]:
+    """Format the body-composition section of a progress report."""
+    latest = report.latest_composition
+    assert latest is not None
+    parts = ["", "Body composition", "-" * 55]
+    values = [f"{latest.measured_at} ({latest.method})"]
+    if latest.weight_lbs is not None:
+        values.append(f"{latest.weight_lbs:.1f} lbs")
+    if latest.derived_body_fat_pct is not None:
+        values.append(f"{latest.derived_body_fat_pct:.1f}% fat")
+    if latest.derived_fat_mass_lbs is not None:
+        values.append(f"{latest.derived_fat_mass_lbs:.1f} lbs fat mass")
+    if latest.derived_fat_free_mass_lbs is not None:
+        values.append(f"{latest.derived_fat_free_mass_lbs:.1f} lbs fat-free mass")
+    if latest.waist_inches is not None:
+        values.append(f"{latest.waist_inches:.1f} in waist")
+    parts.append("  Latest: " + ", ".join(values))
+
+    if report.body_comp_delta is not None:
+        delta = report.body_comp_delta
+        parts.append(f"  Classification: {delta.classification}")
+        parts.append(f"  {delta.summary}")
+        for warning in delta.warnings:
+            parts.append(f"  Warning: {warning}")
+    else:
+        parts.append(
+            "  Only one comparable measurement; a second scan is needed to separate "
+            "fat change from lean change."
+        )
+    return parts

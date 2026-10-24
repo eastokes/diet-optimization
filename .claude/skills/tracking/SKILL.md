@@ -246,6 +246,26 @@ uv run llmn weight add 183.2
 uv run llmn calories log 1850
 ```
 
+### Body composition (recomp)
+
+Scale weight cannot separate fat loss from muscle gain. Record DEXA, BodPod,
+tape, or scale measurements and compare them:
+
+```bash
+uv run llmn bodycomp add --date 2026-09-17 --method dexa \
+  --weight 176.9 --fat-mass 44.7 --lean-mass 125.3 --bone-mass 6.9
+uv run llmn bodycomp add --date 2026-12-17 --method dexa \
+  --weight 173.0 --fat-mass 39.0 --lean-mass 127.0 --bone-mass 6.9
+uv run llmn bodycomp trend --json
+```
+
+DEXA lean soft tissue excludes bone mineral content; supply `--bone-mass` or
+`--fat-free-mass` so fat-free mass is not understated. The comparison classifies
+`recomposition`, `fat_loss_only`, `fat_and_lean_loss`, `lean_gain`, `gain`,
+`unfavorable`, `within_noise`, `not_comparable`, or `insufficient_data`, and it
+warns when the interval is under 4 weeks or the methods differ. Never compare a
+DEXA body-fat percentage with a bioimpedance scale percentage.
+
 Weekly: check progress with `uv run llmn tdee progress`
 
 ## Connecting to Meal Planning

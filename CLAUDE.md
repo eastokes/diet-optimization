@@ -155,6 +155,12 @@ uv run llmn activity set --level moderate
 uv run llmn calories log 1900          # Legacy *planned* intake (not consumed)
 uv run llmn calories log 1900 --date 2025-12-27
 
+uv run llmn bodycomp add --date 2026-09-17 --method dexa \
+  --weight 176.9 --body-fat 25.2 --fat-mass 44.7 --lean-mass 125.3 --bone-mass 6.9
+uv run llmn bodycomp list            # Dated measurements
+uv run llmn bodycomp trend --json    # Fat vs lean change + recomp verdict
+uv run llmn bodycomp delete --date 2026-09-17
+
 uv run llmn tdee estimate --as-of 2025-12-27  # Persist a snapshot
 uv run llmn tdee targets --as-of 2025-12-27   # Bounded recommendation/hold
 uv run llmn tdee progress              # Progress + shared analysis

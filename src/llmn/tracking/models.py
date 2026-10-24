@@ -16,6 +16,7 @@ VALID_QUALITY = ("measured", "estimated", "unknown")
 VALID_GOAL_MODES = ("loss", "maintenance", "gain")
 VALID_ACTIVITY_LEVELS = ("sedentary", "lightly_active", "moderate", "active", "very_active")
 VALID_RMR_SOURCES = ("dexa", "indirect_calorimetry", "estimate", "other")
+VALID_BODYCOMP_METHODS = ("dexa", "bodpod", "caliper", "bia_scale", "tape", "other")
 
 
 @dataclass
@@ -195,6 +196,109 @@ class IntakeWriteResult:
     previous_quality: str | None = None
     previous_completeness: str | None = None
     previous_revision: int | None = None
+
+
+@dataclass
+class BodyComposition:
+    """A dated body-composition measurement.
+
+    Every measurement field is optional so a tape waist entry and a full DEXA
+    scan can share one table. Derived values fill the gaps:
+
+    - fat-free mass: explicit, else lean soft tissue + bone mineral, else
+      weight x (1 - body-fat fraction)
+    - fat mass: explicit, else weight - fat-free mass
+    - body-fat percent: explicit, else fat mass / weight x 100
+
+    DEXA reports lean soft tissue and bone mineral content separately; neither
+    alone is fat-free mass.
+    """
+
+    composition_id: int | None
+    user_id: int
+    measured_at: date
+    method: str = "dexa"
+    weight_lbs: float | None = None
+    body_fat_pct: float | None = None
+    fat_mass_lbs: float | None = None
+    lean_soft_tissue_lbs: float | None = None
+    bone_mineral_lbs: float | None = None
+    fat_free_mass_lbs: float | None = None
+    waist_inches: float | None = None
+    resting_metabolic_rate: float | None = None
+    notes: str | None = None
+    created_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.method not in VALID_BODYCOMP_METHODS:
+            raise ValueError(f"method must be one of {VALID_BODYCOMP_METHODS}, got '{self.method}'")
+        for label, value in (
+            ("weight_lbs", self.weight_lbs),
+            ("fat_mass_lbs", self.fat_mass_lbs),
+            ("lean_soft_tissue_lbs", self.lean_soft_tissue_lbs),
+            ("bone_mineral_lbs", self.bone_mineral_lbs),
+            ("fat_free_mass_lbs", self.fat_free_mass_lbs),
+            ("body_fat_pct", self.body_fat_pct),
+            ("waist_inches", self.waist_inches),
+            ("resting_metabolic_rate", self.resting_metabolic_rate),
+        ):
+            if value is not None and (not math.isfinite(value) or value < 0):
+                raise ValueError(f"{label} must be a finite, non-negative number")
+        if self.body_fat_pct is not None and not 1 <= self.body_fat_pct <= 70:
+            raise ValueError("body_fat_pct must be between 1 and 70")
+        if self.waist_inches is not None and not 5 <= self.waist_inches <= 100:
+            raise ValueError("waist_inches must be between 5 and 100")
+        if self.fat_mass_lbs is not None and self.weight_lbs is not None:
+            if self.fat_mass_lbs >= self.weight_lbs:
+                raise ValueError("fat_mass_lbs must be less than weight_lbs")
+
+    @property
+    def derived_fat_free_mass_lbs(self) -> float | None:
+        if self.fat_free_mass_lbs is not None:
+            return self.fat_free_mass_lbs
+        if self.lean_soft_tissue_lbs is not None:
+            bone = self.bone_mineral_lbs or 0.0
+            return self.lean_soft_tissue_lbs + bone
+        if self.weight_lbs is not None and self.body_fat_pct is not None:
+            return self.weight_lbs * (1.0 - self.body_fat_pct / 100.0)
+        return None
+
+    @property
+    def derived_fat_mass_lbs(self) -> float | None:
+        if self.fat_mass_lbs is not None:
+            return self.fat_mass_lbs
+        fat_free = self.derived_fat_free_mass_lbs
+        if self.weight_lbs is not None and fat_free is not None:
+            return self.weight_lbs - fat_free
+        return None
+
+    @property
+    def derived_body_fat_pct(self) -> float | None:
+        if self.body_fat_pct is not None:
+            return self.body_fat_pct
+        fat_mass = self.derived_fat_mass_lbs
+        if self.weight_lbs and fat_mass is not None:
+            return fat_mass / self.weight_lbs * 100.0
+        return None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "date": self.measured_at.isoformat(),
+            "method": self.method,
+            "weight_lbs": self.weight_lbs,
+            "body_fat_pct": _round_optional(self.derived_body_fat_pct, 1),
+            "fat_mass_lbs": _round_optional(self.derived_fat_mass_lbs, 1),
+            "lean_soft_tissue_lbs": self.lean_soft_tissue_lbs,
+            "bone_mineral_lbs": self.bone_mineral_lbs,
+            "fat_free_mass_lbs": _round_optional(self.derived_fat_free_mass_lbs, 1),
+            "waist_inches": self.waist_inches,
+            "resting_metabolic_rate": self.resting_metabolic_rate,
+            "notes": self.notes,
+        }
+
+
+def _round_optional(value: float | None, digits: int) -> float | None:
+    return round(value, digits) if value is not None else None
 
 
 @dataclass

@@ -708,3 +708,142 @@ class TestProfileBirthdateAndMeasuredRMR:
             expected_exit=1,
         )
         assert "MISSING_RMR" in payload["error_codes"]
+
+
+class TestBodyCompositionCLI:
+    def _add_scan(
+        self,
+        measured_at: date,
+        *,
+        weight: float,
+        fat: float,
+        lean: float,
+        bone: float = 6.9,
+        rmr: float | None = None,
+    ) -> dict:
+        args = [
+            "bodycomp",
+            "add",
+            "--date",
+            measured_at.isoformat(),
+            "--method",
+            "dexa",
+            "--weight",
+            str(weight),
+            "--fat-mass",
+            str(fat),
+            "--lean-mass",
+            str(lean),
+            "--bone-mass",
+            str(bone),
+            "--json",
+        ]
+        if rmr is not None:
+            args[args.index("--json") : args.index("--json")] = ["--rmr", str(rmr)]
+        return run_json(args)
+
+    def test_first_scan_derives_values_and_requests_a_second(
+        self, cli_db: DatabaseConnection
+    ) -> None:
+        create_user()
+        _, as_of, _ = recent_dates(2)
+        payload = self._add_scan(as_of, weight=176.9, fat=44.7, lean=125.3)
+        entry = payload["data"]["entry"]
+        assert entry["fat_free_mass_lbs"] == pytest.approx(132.2)
+        assert entry["body_fat_pct"] == pytest.approx(44.7 / 176.9 * 100, abs=0.1)
+        assert payload["data"]["previous"] is None
+        assert payload["data"]["comparison"] is None
+        assert "first comparable measurement" in payload["human_summary"]
+
+    def test_second_scan_reports_recomposition(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        as_of = date.today() - timedelta(days=1)
+        start = as_of - timedelta(days=90)
+        self._add_scan(start, weight=185.0, fat=45.0, lean=133.0)
+        payload = self._add_scan(as_of, weight=183.0, fat=39.0, lean=137.0)
+
+        comparison = payload["data"]["comparison"]
+        assert comparison["classification"] == "recomposition"
+        assert comparison["fat_mass_change_lbs"] == pytest.approx(-6.0)
+        assert comparison["fat_free_mass_change_lbs"] == pytest.approx(4.0)
+        assert comparison["weeks"] == pytest.approx(90 / 7, abs=0.1)
+        assert "fat mass down 6.0 lbs" in payload["human_summary"]
+
+    def test_scan_rmr_suggests_applying_it(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        _, as_of, _ = recent_dates(2)
+        payload = self._add_scan(as_of, weight=176.9, fat=44.7, lean=125.3, rmr=1850)
+        assert payload["data"]["entry"]["resting_metabolic_rate"] == pytest.approx(1850.0)
+        assert any("llmn user update --rmr" in item for item in payload["suggestions"])
+
+    def test_scan_requires_at_least_one_value(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        payload = run_json(
+            ["bodycomp", "add", "--date", date.today().isoformat(), "--json"],
+            expected_exit=1,
+        )
+        assert "MISSING_BODYCOMP_VALUES" in payload["error_codes"]
+
+    def test_list_trend_and_delete(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        as_of = date.today() - timedelta(days=1)
+        start = as_of - timedelta(days=60)
+        self._add_scan(start, weight=185.0, fat=45.0, lean=133.0)
+        self._add_scan(as_of, weight=183.0, fat=41.0, lean=135.0)
+
+        listed = run_json(["bodycomp", "list", "--json"])
+        assert len(listed["data"]["entries"]) == 2
+
+        trend = run_json(["bodycomp", "trend", "--json"])
+        assert trend["data"]["classification"] == "recomposition"
+        assert trend["data"]["days"] == 60
+
+        human = runner.invoke(app, ["bodycomp", "trend"])
+        assert human.exit_code == 0
+        assert "Body-composition trend" in human.stdout
+        assert "Classification: recomposition" in human.stdout
+
+        deleted = run_json(["bodycomp", "delete", "--date", as_of.isoformat(), "--json"])
+        assert deleted["data"]["deleted"] == 1
+        remaining = run_json(["bodycomp", "list", "--json"])
+        assert len(remaining["data"]["entries"]) == 1
+
+    def test_trend_needs_two_scans(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        _, as_of, _ = recent_dates(2)
+        self._add_scan(as_of, weight=176.9, fat=44.7, lean=125.3)
+        payload = run_json(["bodycomp", "trend", "--json"], expected_exit=1)
+        assert "INSUFFICIENT_BODYCOMP" in payload["error_codes"]
+
+    def test_progress_report_includes_body_composition(self, cli_db: DatabaseConnection) -> None:
+        create_user()
+        as_of = date.today() - timedelta(days=1)
+        start = as_of - timedelta(days=90)
+        weight_days = [as_of - timedelta(days=19 - index) for index in range(20)]
+        for index, day in enumerate(weight_days):
+            run_json(
+                [
+                    "weight",
+                    "add",
+                    f"{183.0 + 0.02 * index:.2f}",
+                    "--date",
+                    day.isoformat(),
+                    "--json",
+                ]
+            )
+        self._add_scan(start, weight=185.0, fat=45.0, lean=133.0)
+        self._add_scan(as_of, weight=183.0, fat=39.0, lean=137.0)
+
+        payload = run_json(
+            ["tdee", "progress", "--as-of", as_of.isoformat(), "--days", "28", "--json"]
+        )
+        body = payload["data"]["body_composition"]
+        assert body["latest"]["date"] == as_of.isoformat()
+        assert body["delta"]["classification"] == "recomposition"
+
+        human = runner.invoke(
+            app, ["tdee", "progress", "--as-of", as_of.isoformat(), "--days", "28"]
+        )
+        assert human.exit_code == 0
+        assert "Body composition" in human.stdout
+        assert "recomposition" in human.stdout

@@ -11,15 +11,22 @@ from rich.console import Console
 from rich.table import Table
 
 from llmn.db.connection import get_db
+from llmn.tracking.bodycomp import compare_compositions, select_comparison
 from llmn.tracking.errors import TrackingError
 from llmn.tracking.estimation import AnalysisWindow, IntakeSummary, summarize_intake
 from llmn.tracking.models import (
     ActivityPeriod,
+    BodyComposition,
     GoalPeriod,
     IntakeEntry,
     IntakeWriteResult,
 )
-from llmn.tracking.queries import ActivityQueries, GoalQueries, IntakeQueries
+from llmn.tracking.queries import (
+    ActivityQueries,
+    BodyCompositionQueries,
+    GoalQueries,
+    IntakeQueries,
+)
 from llmn.tracking.recommendations import GoalSpec, validate_goal
 from llmn.tracking.service import finite_or_raise, get_profile, resolve_goal
 
@@ -839,4 +846,336 @@ def activity_history(
             ]
         },
         human_summary=f"{len(periods)} activity period(s).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Body composition
+# ---------------------------------------------------------------------------
+
+bodycomp_app = typer.Typer(
+    help="Track body composition (DEXA, tape, scale) and get recomp feedback"
+)
+
+
+@bodycomp_app.callback()
+def bodycomp_callback() -> None:
+    _ensure_tables()
+
+
+def _bodycomp_feedback(
+    entry: BodyComposition,
+    previous: BodyComposition | None,
+) -> tuple[list[str], list[str]]:
+    """Build human feedback lines and warnings for a saved measurement."""
+    lines = [
+        f"Saved {entry.method} measurement for {entry.measured_at}: "
+        f"{_fmt(entry.weight_lbs, 1, 'lbs')} weight, "
+        f"{_fmt(entry.derived_body_fat_pct, 1, '%')} body fat, "
+        f"{_fmt(entry.derived_fat_mass_lbs, 1, 'lbs')} fat mass, "
+        f"{_fmt(entry.derived_fat_free_mass_lbs, 1, 'lbs')} fat-free mass."
+    ]
+    warnings: list[str] = []
+    if previous is None:
+        lines.append(
+            "This is the first comparable measurement; add a second scan to measure "
+            "recomposition rather than inferring it from scale weight."
+        )
+        return lines, warnings
+
+    delta = compare_compositions(previous, entry)
+    lines.append(f"Change since {previous.measured_at}: {delta.summary}")
+    warnings.extend(delta.warnings)
+    return lines, warnings
+
+
+def _fmt(value: float | None, digits: int, unit: str) -> str:
+    return f"{value:.{digits}f} {unit}" if value is not None else "no"
+
+
+@bodycomp_app.command("add")
+def bodycomp_add(
+    date_str: str | None = typer.Option(
+        None, "--date", "-d", help="Measurement date (YYYY-MM-DD, default: today)"
+    ),
+    method: str = typer.Option(
+        "dexa", "--method", help="dexa, bodpod, caliper, bia_scale, tape, or other"
+    ),
+    weight: float | None = typer.Option(None, "--weight", help="Scale or scan weight in lbs"),
+    body_fat: float | None = typer.Option(None, "--body-fat", help="Body-fat percentage"),
+    fat_mass: float | None = typer.Option(None, "--fat-mass", help="Fat mass in lbs"),
+    lean_mass: float | None = typer.Option(
+        None, "--lean-mass", help="Lean soft-tissue mass in lbs (DEXA lean, excludes bone)"
+    ),
+    bone_mass: float | None = typer.Option(None, "--bone-mass", help="Bone mineral content in lbs"),
+    fat_free_mass: float | None = typer.Option(
+        None, "--fat-free-mass", help="Fat-free mass in lbs, if reported directly"
+    ),
+    waist: float | None = typer.Option(None, "--waist", help="Waist circumference in inches"),
+    rmr: float | None = typer.Option(
+        None, "--rmr", help="Resting metabolic rate in kcal/day, if reported"
+    ),
+    notes: str | None = typer.Option(None, "--notes", "-n"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Record a dated body-composition measurement."""
+    command = "bodycomp add"
+    provided = [
+        weight,
+        body_fat,
+        fat_mass,
+        lean_mass,
+        bone_mass,
+        fat_free_mass,
+        waist,
+        rmr,
+    ]
+    try:
+        if all(value is None for value in provided):
+            raise TrackingError(
+                "MISSING_BODYCOMP_VALUES",
+                "Provide at least one measurement (weight, body-fat, mass, waist, or RMR).",
+            )
+        measured_at = _parse_date(
+            date_str, default=date.today(), allow_future=False, field_name="--date"
+        )
+        if weight is not None:
+            finite_or_raise(weight, "--weight")
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            entry = BodyComposition(
+                composition_id=None,
+                user_id=profile.user_id,
+                measured_at=measured_at,
+                method=method,
+                weight_lbs=weight,
+                body_fat_pct=body_fat,
+                fat_mass_lbs=fat_mass,
+                lean_soft_tissue_lbs=lean_mass,
+                bone_mineral_lbs=bone_mass,
+                fat_free_mass_lbs=fat_free_mass,
+                waist_inches=waist,
+                resting_metabolic_rate=rmr,
+                notes=notes,
+            )
+            previous_rows = BodyCompositionQueries.get_entries(
+                conn, profile.user_id, end_date=measured_at - timedelta(days=1)
+            )
+            previous_candidates = [
+                row for row in previous_rows if row.derived_fat_mass_lbs is not None
+            ]
+            previous = previous_candidates[-1] if previous_candidates else None
+            stored = BodyCompositionQueries.upsert(conn, entry)
+            suggestions: list[str] = []
+            if stored.resting_metabolic_rate is not None and not profile.has_measured_rmr:
+                suggestions.append(
+                    "If this RMR was measured rather than estimated, apply it with: "
+                    f"llmn user update --rmr {stored.resting_metabolic_rate:.0f} "
+                    f"--rmr-date {stored.measured_at} --rmr-source {stored.method}"
+                )
+    except TrackingError as error:
+        _fail(command, error, json_output)
+        return
+    except ValueError as error:
+        _fail(command, TrackingError("INVALID_BODYCOMP", str(error)), json_output)
+        return
+
+    lines, warnings = _bodycomp_feedback(stored, previous)
+    data: dict[str, Any] = {
+        "entry": stored.to_dict(),
+        "previous": previous.to_dict() if previous is not None else None,
+        "comparison": (
+            compare_compositions(previous, stored).to_dict() if previous is not None else None
+        ),
+    }
+    _emit(
+        command,
+        json_output=json_output,
+        data=data,
+        human_summary=" ".join(lines),
+        human_lines=lines,
+        warnings=warnings,
+        suggestions=suggestions,
+    )
+
+
+@bodycomp_app.command("list")
+def bodycomp_list(
+    days: int = typer.Option(3650, "--days", "-d", help="Calendar days to show"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """List body-composition measurements."""
+    command = "bodycomp list"
+    as_of = date.today()
+    start = as_of - timedelta(days=max(1, days) - 1)
+    try:
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            entries = BodyCompositionQueries.get_entries(
+                conn, profile.user_id, start_date=start, end_date=as_of
+            )
+    except TrackingError as error:
+        _fail(command, error, json_output)
+        return
+
+    if json_output:
+        _emit(
+            command,
+            json_output=True,
+            data={
+                "window": {"start": start.isoformat(), "end": as_of.isoformat(), "days": days},
+                "entries": [entry.to_dict() for entry in entries],
+            },
+            human_summary=f"{len(entries)} body-composition measurement(s)",
+        )
+        return
+
+    if not entries:
+        console.print("No body-composition measurements found.")
+        console.print(
+            "Add one with: llmn bodycomp add --date 2026-09-17 --method dexa "
+            "--weight 176.9 --body-fat 25.2 --fat-mass 44.7 --lean-mass 125.3 --bone-mass 6.9"
+        )
+        return
+
+    table = Table(show_header=True, header_style="bold")
+    table.add_column("Date", style="cyan")
+    table.add_column("Method")
+    table.add_column("Weight", justify="right")
+    table.add_column("BF%", justify="right")
+    table.add_column("Fat", justify="right")
+    table.add_column("FFM", justify="right")
+    table.add_column("Waist", justify="right")
+    for entry in entries:
+        table.add_row(
+            entry.measured_at.isoformat(),
+            entry.method,
+            _fmt(entry.weight_lbs, 1, ""),
+            _fmt(entry.derived_body_fat_pct, 1, ""),
+            _fmt(entry.derived_fat_mass_lbs, 1, ""),
+            _fmt(entry.derived_fat_free_mass_lbs, 1, ""),
+            _fmt(entry.waist_inches, 1, ""),
+        )
+    console.print(table)
+    comparison = select_comparison(entries)
+    if comparison is None:
+        console.print(
+            "\nOnly one comparable measurement so far; a second one enables "
+            "recomposition analysis (fat mass vs fat-free mass)."
+        )
+    else:
+        delta = compare_compositions(*comparison)
+        console.print(f"\n{delta.summary}")
+        for warning in delta.warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
+
+
+@bodycomp_app.command("trend")
+def bodycomp_trend(
+    from_str: str | None = typer.Option(None, "--from", help="First date to compare"),
+    to_str: str | None = typer.Option(None, "--to", help="Last date to compare"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Compare body-composition measurements for recomp feedback."""
+    command = "bodycomp trend"
+    try:
+        start = _parse_date(from_str, default=date.min, allow_future=False, field_name="--from")
+        end = _parse_date(to_str, default=date.today(), allow_future=False, field_name="--to")
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            entries = BodyCompositionQueries.get_entries(
+                conn, profile.user_id, start_date=start, end_date=end
+            )
+    except TrackingError as error:
+        _fail(command, error, json_output)
+        return
+
+    comparison = select_comparison(entries, start_date=None, end_date=None)
+    if comparison is None:
+        _fail(
+            command,
+            TrackingError(
+                "INSUFFICIENT_BODYCOMP",
+                "Recomp analysis needs two comparable measurements with weight and fat mass.",
+                [
+                    "Add scans with: llmn bodycomp add --date <YYYY-MM-DD> --method dexa "
+                    "--weight <lbs> --fat-mass <lbs>"
+                ],
+            ),
+            json_output,
+        )
+        return
+
+    delta = compare_compositions(*comparison)
+    if json_output:
+        _emit(
+            command,
+            json_output=True,
+            data=delta.to_dict(),
+            human_summary=delta.summary,
+            warnings=delta.warnings,
+        )
+        return
+
+    console.print("[bold]Body-composition trend[/bold]")
+    console.print(
+        f"  {delta.start.measured_at} ({delta.start.method}) -> "
+        f"{delta.end.measured_at} ({delta.end.method})"
+    )
+    console.print(f"  Interval: {delta.weeks:.1f} weeks")
+    console.print(f"  Classification: {delta.classification}")
+    if delta.fat_mass_change_lbs is not None:
+        console.print(f"  Fat mass: {delta.fat_mass_change_lbs:+.1f} lbs")
+    if delta.fat_free_mass_change_lbs is not None:
+        console.print(f"  Fat-free mass: {delta.fat_free_mass_change_lbs:+.1f} lbs")
+    if delta.body_fat_pct_change is not None:
+        console.print(f"  Body fat: {delta.body_fat_pct_change:+.1f} pts")
+    if delta.waist_change_inches is not None:
+        console.print(f"  Waist: {delta.waist_change_inches:+.1f} in")
+    console.print(f"\n{delta.summary}")
+    for warning in delta.warnings:
+        console.print(f"[yellow]{warning}[/yellow]")
+
+
+@bodycomp_app.command("delete")
+def bodycomp_delete(
+    date_str: str = typer.Option(..., "--date", "-d", help="Measurement date (YYYY-MM-DD)"),
+    method: str | None = typer.Option(None, "--method", help="Only delete this method"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+) -> None:
+    """Delete a body-composition measurement."""
+    command = "bodycomp delete"
+    try:
+        measured_at = _parse_date(
+            date_str, default=date.today(), allow_future=True, field_name="--date"
+        )
+        db = get_db()
+        with db.get_connection() as conn:
+            profile = get_profile(conn, user_id)
+            assert profile.user_id is not None
+            deleted = BodyCompositionQueries.delete(conn, profile.user_id, measured_at, method)
+        if not deleted:
+            raise TrackingError(
+                "BODYCOMP_NOT_FOUND",
+                f"No body-composition entry found on {measured_at}.",
+            )
+    except TrackingError as error:
+        _fail(command, error, json_output)
+        return
+
+    _emit(
+        command,
+        json_output=json_output,
+        data={"date": measured_at.isoformat(), "method": method, "deleted": deleted},
+        human_summary=f"Deleted {deleted} body-composition entry(ies) for {measured_at}.",
     )

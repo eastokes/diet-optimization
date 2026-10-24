@@ -411,6 +411,8 @@ All commands should be prefixed with `uv run` when using `uv` as the project man
 | `llmn tdee estimate` | Persist a calendar-aware expenditure estimate |
 | `llmn tdee targets` | Get a bounded recommendation or explicit hold |
 | `llmn tdee progress` | Show progress plus the shared analysis |
+| `llmn bodycomp add` | Record a dated DEXA/tape/scale body-composition measurement |
+| `llmn bodycomp trend` | Compare scans for fat-loss vs muscle-gain (recomp) feedback |
 | `llmn user update --rmr` | Record a measured RMR that replaces the Mifflin baseline |
 
 ## Advanced LLM Features

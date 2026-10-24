@@ -14,7 +14,7 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from llmn.cli_tracking import activity_app, goal_app, intake_app
+from llmn.cli_tracking import activity_app, bodycomp_app, goal_app, intake_app
 from llmn.config import get_settings
 from llmn.db import get_db
 from llmn.db.queries import (
@@ -61,6 +61,7 @@ app.add_typer(tdee_app, name="tdee")
 app.add_typer(intake_app, name="intake")
 app.add_typer(goal_app, name="goal")
 app.add_typer(activity_app, name="activity")
+app.add_typer(bodycomp_app, name="bodycomp")
 
 
 # ============================================================================
@@ -4534,6 +4535,16 @@ def tdee_progress(
                         "expected_deficit": report.tdee.expected_deficit,
                         "measured_implied_deficit": report.tdee.implied_deficit_measured,
                         "reason_codes": report.tdee.reason_codes,
+                    },
+                    "body_composition": {
+                        "latest": (
+                            report.latest_composition.to_dict()
+                            if report.latest_composition
+                            else None
+                        ),
+                        "delta": (
+                            report.body_comp_delta.to_dict() if report.body_comp_delta else None
+                        ),
                     },
                     "goal": report.goal.to_dict() if report.goal else None,
                     "goal_weight": report.goal_weight,

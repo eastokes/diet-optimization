@@ -232,9 +232,36 @@ CREATE INDEX IF NOT EXISTS idx_activity_periods_user_date
     ON activity_periods(user_id, effective_from);
 """
 
-# Append the v2 tables to the fresh-schema SQL while keeping the constant above
-# available to the migration runner.
-SCHEMA_SQL = SCHEMA_SQL + TRACKING_V2_SQL
+# Tracking-v3 tables: dated body-composition measurements (DEXA, tape, scale).
+TRACKING_V3_SQL = """
+CREATE TABLE IF NOT EXISTS body_composition (
+    composition_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    measured_at DATE NOT NULL,
+    method TEXT NOT NULL CHECK(
+        method IN ('dexa', 'bodpod', 'caliper', 'bia_scale', 'tape', 'other')
+    ),
+    weight_lbs REAL,
+    body_fat_pct REAL CHECK(body_fat_pct IS NULL OR (body_fat_pct >= 1 AND body_fat_pct <= 70)),
+    fat_mass_lbs REAL,
+    lean_soft_tissue_lbs REAL,
+    bone_mineral_lbs REAL,
+    fat_free_mass_lbs REAL,
+    waist_inches REAL,
+    resting_metabolic_rate REAL,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, measured_at, method),
+    FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_body_composition_user_date
+    ON body_composition(user_id, measured_at);
+"""
+
+# Append the v2 and v3 tables to the fresh-schema SQL while keeping the
+# constants above available to the migration runner.
+SCHEMA_SQL = SCHEMA_SQL + TRACKING_V2_SQL + TRACKING_V3_SQL
 
 
 def get_schema_sql() -> str:

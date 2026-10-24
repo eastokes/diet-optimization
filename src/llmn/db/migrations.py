@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 
-from llmn.db.schema import TRACKING_V2_SQL
+from llmn.db.schema import TRACKING_V2_SQL, TRACKING_V3_SQL
 
 MIGRATION_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -119,6 +119,14 @@ def _migration_4_birthdate_and_rmr(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "tdee_estimates", "baseline_source", "TEXT")
 
 
+def _migration_5_body_composition(conn: sqlite3.Connection) -> None:
+    """Create the body-composition table for recomp analysis."""
+    cleaned = "\n".join(line.split("--", 1)[0] for line in TRACKING_V3_SQL.splitlines())
+    for statement in cleaned.split(";"):
+        if statement.strip():
+            conn.execute(statement)
+
+
 Migration = tuple[int, str, Callable[[sqlite3.Connection], None]]
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -126,6 +134,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     (2, "create tracking v2 tables and estimate metadata", _migration_2_tracking_v2),
     (3, "backfill legacy calorie rows as unclassified intake", _migration_3_legacy_calories),
     (4, "add birthdate and measured RMR to user_profiles", _migration_4_birthdate_and_rmr),
+    (5, "create body_composition table", _migration_5_body_composition),
 )
 
 LATEST_SCHEMA_VERSION = MIGRATIONS[-1][0]

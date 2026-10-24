@@ -66,6 +66,25 @@ number of calendar days in the interval. This makes seven complete days in a
   ±(1.96 × 200) kcal/day instead of ±(1.96 × 250) kcal/day. This is not a claim
   that the TDEE is known to ±200; activity-multiplier error remains.
 
+## Body composition and recomposition
+
+- One table holds DEXA, BodPod, caliper, bioimpedance, tape, and other
+  measurements; every value is optional so a waist entry and a full scan can
+  coexist. Measurement identity is `(user, date, method)`.
+- Fat-free mass falls back in this order: explicit value, lean soft tissue plus
+  bone mineral content, weight x (1 - body-fat fraction). DEXA lean mass alone
+  understates fat-free mass because bone mineral content is reported separately.
+- Fat mass falls back to weight - fat-free mass; body-fat percent falls back to
+  fat mass / weight.
+- Comparisons use a 1.0 lb noise floor for both fat and fat-free mass. Smaller
+  changes are reported as `within_noise` rather than as progress.
+- Comparisons under 28 days carry a measurement-error warning, and comparisons
+  across different methods are labelled `not_comparable` rather than
+  interpreted.
+- The progress report shows the latest scan, the fat/lean change, and the
+  classification. A scan weight more than 2 lbs away from the scale trend is
+  called out as a method difference, not a body change.
+
 ## Evidence gates for a learned estimate
 
 An adaptive estimate requires all of the following:

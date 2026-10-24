@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 from llmn.tracking.ema import update_trend
 from llmn.tracking.models import (
     ActivityPeriod,
+    BodyComposition,
     CalorieEntry,
     GoalPeriod,
     IntakeEntry,
@@ -706,6 +707,121 @@ class IntakeQueries:
 
         conn.commit()
         return updated, skipped
+
+
+class BodyCompositionQueries:
+    """Queries for dated body-composition measurements."""
+
+    _SELECT = """
+        SELECT composition_id, user_id, measured_at, method, weight_lbs,
+               body_fat_pct, fat_mass_lbs, lean_soft_tissue_lbs,
+               bone_mineral_lbs, fat_free_mass_lbs, waist_inches,
+               resting_metabolic_rate, notes, created_at
+        FROM body_composition
+    """
+
+    @staticmethod
+    def _from_row(row: sqlite3.Row) -> BodyComposition:
+        return BodyComposition(
+            composition_id=row[0],
+            user_id=row[1],
+            measured_at=date.fromisoformat(row[2]),
+            method=row[3],
+            weight_lbs=row[4],
+            body_fat_pct=row[5],
+            fat_mass_lbs=row[6],
+            lean_soft_tissue_lbs=row[7],
+            bone_mineral_lbs=row[8],
+            fat_free_mass_lbs=row[9],
+            waist_inches=row[10],
+            resting_metabolic_rate=row[11],
+            notes=row[12],
+            created_at=datetime.fromisoformat(row[13]) if row[13] else None,
+        )
+
+    @staticmethod
+    def upsert(conn: sqlite3.Connection, entry: BodyComposition) -> BodyComposition:
+        """Insert or replace a measurement for a user/date/method."""
+        conn.execute(
+            """
+            INSERT INTO body_composition
+                (user_id, measured_at, method, weight_lbs, body_fat_pct,
+                 fat_mass_lbs, lean_soft_tissue_lbs, bone_mineral_lbs,
+                 fat_free_mass_lbs, waist_inches, resting_metabolic_rate, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, measured_at, method) DO UPDATE SET
+                weight_lbs = excluded.weight_lbs,
+                body_fat_pct = excluded.body_fat_pct,
+                fat_mass_lbs = excluded.fat_mass_lbs,
+                lean_soft_tissue_lbs = excluded.lean_soft_tissue_lbs,
+                bone_mineral_lbs = excluded.bone_mineral_lbs,
+                fat_free_mass_lbs = excluded.fat_free_mass_lbs,
+                waist_inches = excluded.waist_inches,
+                resting_metabolic_rate = excluded.resting_metabolic_rate,
+                notes = excluded.notes
+            """,
+            (
+                entry.user_id,
+                entry.measured_at.isoformat(),
+                entry.method,
+                entry.weight_lbs,
+                entry.body_fat_pct,
+                entry.fat_mass_lbs,
+                entry.lean_soft_tissue_lbs,
+                entry.bone_mineral_lbs,
+                entry.fat_free_mass_lbs,
+                entry.waist_inches,
+                entry.resting_metabolic_rate,
+                entry.notes,
+            ),
+        )
+        conn.commit()
+        row = conn.execute(
+            BodyCompositionQueries._SELECT
+            + " WHERE user_id = ? AND measured_at = ? AND method = ?",
+            (entry.user_id, entry.measured_at.isoformat(), entry.method),
+        ).fetchone()
+        assert row is not None
+        return BodyCompositionQueries._from_row(row)
+
+    @staticmethod
+    def get_entries(
+        conn: sqlite3.Connection,
+        user_id: int,
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[BodyComposition]:
+        query = BodyCompositionQueries._SELECT + " WHERE user_id = ?"
+        params: list[object] = [user_id]
+        if start_date:
+            query += " AND measured_at >= ?"
+            params.append(start_date.isoformat())
+        if end_date:
+            query += " AND measured_at <= ?"
+            params.append(end_date.isoformat())
+        query += " ORDER BY measured_at, method"
+        rows = conn.execute(query, params).fetchall()
+        return [BodyCompositionQueries._from_row(row) for row in rows]
+
+    @staticmethod
+    def delete(
+        conn: sqlite3.Connection,
+        user_id: int,
+        measured_at: date,
+        method: str | None = None,
+    ) -> int:
+        if method is None:
+            cursor = conn.execute(
+                "DELETE FROM body_composition WHERE user_id = ? AND measured_at = ?",
+                (user_id, measured_at.isoformat()),
+            )
+        else:
+            cursor = conn.execute(
+                "DELETE FROM body_composition WHERE user_id = ? AND measured_at = ? AND method = ?",
+                (user_id, measured_at.isoformat(), method),
+            )
+        conn.commit()
+        return int(cursor.rowcount)
 
 
 class GoalQueries:
