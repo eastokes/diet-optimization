@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from llmn.optimizer.multiperiod_models import MealResult, MultiPeriodResult
 
@@ -159,16 +158,18 @@ def consolidate_meal(
         # Create cleaned name (capitalize first letter)
         name = base.title()
 
-        merged.append(ConsolidatedFood(
-            name=name,
-            grams=rounded_grams,
-            calories=total_cals,
-            protein=total_prot,
-            carbs=total_carbs,
-            fat=total_fat,
-            original_foods=original_foods,
-            fdc_ids=fdc_ids,
-        ))
+        merged.append(
+            ConsolidatedFood(
+                name=name,
+                grams=rounded_grams,
+                calories=total_cals,
+                protein=total_prot,
+                carbs=total_carbs,
+                fat=total_fat,
+                original_foods=original_foods,
+                fdc_ids=fdc_ids,
+            )
+        )
 
     # Sort by calories (highest first) and take top max_foods
     merged.sort(key=lambda x: x.calories, reverse=True)
@@ -313,8 +314,6 @@ def consolidated_result_to_dict(result: ConsolidatedResult) -> dict:
             }
             for meal in result.meals
         },
-        "daily_totals": {
-            k: round(v, 1) for k, v in result.daily_totals.items()
-        },
+        "daily_totals": {k: round(v, 1) for k, v in result.daily_totals.items()},
         "consolidation_notes": result.consolidation_notes,
     }

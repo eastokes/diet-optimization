@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import yaml
@@ -95,11 +95,7 @@ class ConstraintBuilder:
                 self._food_ids = [fid for fid in self._food_ids if fid not in excluded_by_tag]
 
             # Apply food-specific exclusions
-            excluded = {
-                fc.fdc_id
-                for fc in self.request.food_constraints
-                if fc.max_grams == 0
-            }
+            excluded = {fc.fdc_id for fc in self.request.food_constraints if fc.max_grams == 0}
             self._food_ids = [fid for fid in self._food_ids if fid not in excluded]
 
             self._total_eligible_foods = len(self._food_ids)
@@ -151,8 +147,7 @@ class ConstraintBuilder:
         excluded = {
             fc.fdc_id
             for fc in self.request.food_constraints
-            if fc.max_grams == 0
-            or (fc.max_grams is None and fc.min_grams is None)
+            if fc.max_grams == 0 or (fc.max_grams is None and fc.min_grams is None)
         }
         self._food_ids = [fid for fid in self._food_ids if fid not in excluded]
 
@@ -662,9 +657,7 @@ def load_multiperiod_profile_from_yaml(yaml_path: Path):
         try:
             fdc_id = int(fdc_id_str)
             meal_types = [MealType(m.lower()) for m in allowed_meals]
-            food_meal_affinities.append(
-                FoodMealAffinity(fdc_id=fdc_id, allowed_meals=meal_types)
-            )
+            food_meal_affinities.append(FoodMealAffinity(fdc_id=fdc_id, allowed_meals=meal_types))
         except (ValueError, KeyError):
             pass  # Skip invalid entries
 
@@ -680,12 +673,8 @@ def load_multiperiod_profile_from_yaml(yaml_path: Path):
         mode=str(options.get("mode", "feasibility")),
         exclude_tags=data.get("exclude_tags", []),
         include_tags=data.get("include_tags", []),
-        max_grams_per_food_per_meal=float(
-            options.get("max_grams_per_food_per_meal", 300)
-        ),
-        max_grams_per_food_daily=float(
-            options.get("max_grams_per_food_daily", 500)
-        ),
+        max_grams_per_food_per_meal=float(options.get("max_grams_per_food_per_meal", 300)),
+        max_grams_per_food_daily=float(options.get("max_grams_per_food_daily", 500)),
         max_foods=int(options.get("max_foods", 300)),
         lambda_cost=float(options.get("lambda_cost", 1.0)),
         lambda_deviation=float(options.get("lambda_deviation", 0.001)),

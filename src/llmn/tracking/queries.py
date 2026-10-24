@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 import sqlite3
 from datetime import date, datetime, timedelta
-from typing import Optional
 
 from llmn.tracking.ema import update_trend
 from llmn.tracking.models import (
@@ -71,7 +70,7 @@ class UserQueries:
         return cursor.lastrowid or 0
 
     @staticmethod
-    def get_user(conn: sqlite3.Connection, user_id: int) -> Optional[UserProfile]:
+    def get_user(conn: sqlite3.Connection, user_id: int) -> UserProfile | None:
         """Get user profile by ID."""
         row = conn.execute(
             UserQueries._SELECT + " WHERE user_id = ?",
@@ -80,7 +79,7 @@ class UserQueries:
         return UserQueries._from_row(row) if row is not None else None
 
     @staticmethod
-    def get_default_user(conn: sqlite3.Connection) -> Optional[UserProfile]:
+    def get_default_user(conn: sqlite3.Connection) -> UserProfile | None:
         """Get the first (default) user profile."""
         row = conn.execute(UserQueries._SELECT + " ORDER BY user_id LIMIT 1").fetchone()
         return UserQueries._from_row(row) if row is not None else None
@@ -162,7 +161,7 @@ class WeightQueries:
         user_id: int,
         weight_lbs: float,
         measured_at: date,
-        notes: Optional[str] = None,
+        notes: str | None = None,
     ) -> WeightEntry:
         """Add or replace a weight entry, then rebuild all later trends."""
         if not math.isfinite(weight_lbs) or weight_lbs <= 0:
@@ -200,9 +199,7 @@ class WeightQueries:
         )
 
     @staticmethod
-    def delete_weight(
-        conn: sqlite3.Connection, user_id: int, measured_at: date
-    ) -> bool:
+    def delete_weight(conn: sqlite3.Connection, user_id: int, measured_at: date) -> bool:
         """Delete a weight entry and rebuild later trends. Return True if deleted."""
         cursor = conn.execute(
             "DELETE FROM weight_log WHERE user_id = ? AND measured_at = ?",
@@ -214,9 +211,7 @@ class WeightQueries:
         return bool(cursor.rowcount)
 
     @staticmethod
-    def get_latest_weight(
-        conn: sqlite3.Connection, user_id: int
-    ) -> Optional[WeightEntry]:
+    def get_latest_weight(conn: sqlite3.Connection, user_id: int) -> WeightEntry | None:
         """Get the most recent weight entry."""
         row = conn.execute(
             """
@@ -243,7 +238,7 @@ class WeightQueries:
     @staticmethod
     def get_latest_weight_on_or_before(
         conn: sqlite3.Connection, user_id: int, as_of: date
-    ) -> Optional[WeightEntry]:
+    ) -> WeightEntry | None:
         """Get the most recent measurement on or before ``as_of``."""
         row = conn.execute(
             """
@@ -271,9 +266,9 @@ class WeightQueries:
     def get_weight_history(
         conn: sqlite3.Connection,
         user_id: int,
-        days: Optional[int] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        days: int | None = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> list[WeightEntry]:
         """Get weight history for a calendar interval.
 
@@ -316,9 +311,7 @@ class WeightQueries:
         ]
 
     @staticmethod
-    def get_trend_at_date(
-        conn: sqlite3.Connection, user_id: int, at_date: date
-    ) -> Optional[float]:
+    def get_trend_at_date(conn: sqlite3.Connection, user_id: int, at_date: date) -> float | None:
         """Get the trend value at or before a specific date."""
         row = conn.execute(
             """
@@ -341,7 +334,7 @@ class CalorieQueries:
         user_id: int,
         log_date: date,
         planned_calories: float,
-        notes: Optional[str] = None,
+        notes: str | None = None,
     ) -> CalorieEntry:
         """Log planned calories for a day (insert or replace)."""
         cursor = conn.execute(
@@ -365,8 +358,8 @@ class CalorieQueries:
     def get_calorie_history(
         conn: sqlite3.Connection,
         user_id: int,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> list[CalorieEntry]:
         """Get calorie log history."""
         query = """
@@ -404,7 +397,7 @@ class CalorieQueries:
         user_id: int,
         start_date: date,
         end_date: date,
-    ) -> Optional[float]:
+    ) -> float | None:
         """Get average daily planned calories over a period."""
         row = conn.execute(
             """
@@ -451,7 +444,7 @@ class IntakeQueries:
         completeness: str = "complete",
         quality: str = "measured",
         provenance: str = "manual",
-        notes: Optional[str] = None,
+        notes: str | None = None,
     ) -> IntakeEntry:
         """Insert or revise an intake observation for a date and kind."""
         # Validate through the model before writing.
@@ -505,9 +498,9 @@ class IntakeQueries:
     def get_entries(
         conn: sqlite3.Connection,
         user_id: int,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        kind: Optional[str] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        kind: str | None = None,
     ) -> list[IntakeEntry]:
         query = IntakeQueries._SELECT + " WHERE user_id = ?"
         params: list[object] = [user_id]
@@ -541,8 +534,8 @@ class IntakeQueries:
     def preview_legacy(
         conn: sqlite3.Connection,
         user_id: int,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> list[date]:
         rows = conn.execute(
             """
@@ -569,8 +562,8 @@ class IntakeQueries:
         as_kind: str,
         completeness: str,
         quality: str,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
     ) -> tuple[list[date], list[date]]:
         """Classify legacy rows. Return (updated_dates, skipped_conflicts)."""
         dates = IntakeQueries.preview_legacy(conn, user_id, start_date, end_date)
@@ -669,7 +662,7 @@ class GoalQueries:
     @staticmethod
     def get_effective_goal(
         conn: sqlite3.Connection, user_id: int, as_of: date
-    ) -> Optional[GoalPeriod]:
+    ) -> GoalPeriod | None:
         row = conn.execute(
             GoalQueries._SELECT
             + " WHERE user_id = ? AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1",
@@ -679,7 +672,7 @@ class GoalQueries:
 
     @staticmethod
     def get_history(
-        conn: sqlite3.Connection, user_id: int, as_of: Optional[date] = None
+        conn: sqlite3.Connection, user_id: int, as_of: date | None = None
     ) -> list[GoalPeriod]:
         query = GoalQueries._SELECT + " WHERE user_id = ?"
         params: list[object] = [user_id]
@@ -743,7 +736,7 @@ class ActivityQueries:
     @staticmethod
     def get_effective_activity(
         conn: sqlite3.Connection, user_id: int, as_of: date
-    ) -> Optional[ActivityPeriod]:
+    ) -> ActivityPeriod | None:
         row = conn.execute(
             ActivityQueries._SELECT
             + " WHERE user_id = ? AND effective_from <= ? ORDER BY effective_from DESC LIMIT 1",
@@ -753,7 +746,7 @@ class ActivityQueries:
 
     @staticmethod
     def get_history(
-        conn: sqlite3.Connection, user_id: int, as_of: Optional[date] = None
+        conn: sqlite3.Connection, user_id: int, as_of: date | None = None
     ) -> list[ActivityPeriod]:
         query = ActivityQueries._SELECT + " WHERE user_id = ?"
         params: list[object] = [user_id]
@@ -829,9 +822,7 @@ class TDEEQueries:
         return cursor.lastrowid or 0
 
     @staticmethod
-    def get_latest_estimate(
-        conn: sqlite3.Connection, user_id: int
-    ) -> Optional[TDEEEstimate]:
+    def get_latest_estimate(conn: sqlite3.Connection, user_id: int) -> TDEEEstimate | None:
         """Get the most recent TDEE estimate."""
         row = conn.execute(
             TDEEQueries._SELECT

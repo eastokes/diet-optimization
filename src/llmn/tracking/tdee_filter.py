@@ -23,9 +23,7 @@ Missing data handling:
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
-from typing import Optional
-
+from dataclasses import dataclass
 
 # Maximum variance to prevent divergence after long gaps (200 kcal/day std)
 MAX_VARIANCE = 40000.0
@@ -165,7 +163,7 @@ def run_filter_on_history(
     trend_history: list[tuple[float, float]],  # (trend_start, trend_end) per week
     calorie_history: list[float],  # average daily calories per week
     tdee_history: list[float],  # per-week Mifflin TDEE (based on that week's weight)
-    initial_filter: Optional[TDEEFilter] = None,
+    initial_filter: TDEEFilter | None = None,
 ) -> TDEEFilter:
     """
     Run Kalman filter on historical data.

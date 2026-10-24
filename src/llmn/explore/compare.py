@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from sqlite3 import Connection
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -16,8 +16,8 @@ class RunSummary:
     timestamp: str
     status: str
     success: bool
-    profile: Optional[str]
-    total_cost: Optional[float]
+    profile: str | None
+    total_cost: float | None
     food_count: int
     calories: float
     protein: float
@@ -30,7 +30,7 @@ class RunComparison:
 
     run_a: RunSummary
     run_b: RunSummary
-    cost_difference: Optional[float]
+    cost_difference: float | None
     calorie_difference: float
     protein_difference: float
     foods_only_in_a: list[str]
@@ -38,7 +38,7 @@ class RunComparison:
     foods_in_both: list[str]
 
 
-def load_run(conn: Connection, run_id: int) -> Optional[RunSummary]:
+def load_run(conn: Connection, run_id: int) -> RunSummary | None:
     """Load a run from the database and extract summary.
 
     Args:
@@ -103,7 +103,7 @@ def compare_runs(
     conn: Connection,
     run_id_a: int,
     run_id_b: int,
-) -> Optional[RunComparison]:
+) -> RunComparison | None:
     """Compare two optimization runs.
 
     Args:
@@ -195,7 +195,7 @@ def format_run_comparison(comparison: RunComparison) -> dict[str, Any]:
 def list_runs(
     conn: Connection,
     limit: int = 10,
-    profile: Optional[str] = None,
+    profile: str | None = None,
 ) -> list[RunSummary]:
     """List recent optimization runs.
 

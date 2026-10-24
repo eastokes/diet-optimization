@@ -5,7 +5,6 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from llmn.optimizer.constraints import ConstraintBuilder, load_profile_from_yaml

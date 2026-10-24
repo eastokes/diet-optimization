@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from llmn.data.food_categories import FoodCategory, classify_food
 
 
@@ -14,8 +12,12 @@ class TestFoodClassification:
         """Test classifying high-protein foods."""
         # Chicken breast: ~31g protein, ~3.6g fat, ~0g carbs per 100g
         category = classify_food(
-            protein_per_100g=31, carbs_per_100g=0, fat_per_100g=3.6,
-            fiber_per_100g=0, energy_per_100g=165, description="Chicken breast"
+            protein_per_100g=31,
+            carbs_per_100g=0,
+            fat_per_100g=3.6,
+            fiber_per_100g=0,
+            energy_per_100g=165,
+            description="Chicken breast",
         )
         assert category == FoodCategory.PROTEIN
 
@@ -23,8 +25,12 @@ class TestFoodClassification:
         """Test classifying high-fat foods."""
         # Olive oil: 0g protein, 0g carbs, 100g fat per 100g
         category = classify_food(
-            protein_per_100g=0, carbs_per_100g=0, fat_per_100g=100,
-            fiber_per_100g=0, energy_per_100g=884, description="Olive oil"
+            protein_per_100g=0,
+            carbs_per_100g=0,
+            fat_per_100g=100,
+            fiber_per_100g=0,
+            energy_per_100g=884,
+            description="Olive oil",
         )
         assert category == FoodCategory.FAT
 
@@ -32,8 +38,12 @@ class TestFoodClassification:
         """Test classifying high-carb foods."""
         # Rice: ~2.7g protein, ~26g carbs, ~1g fat per 100g
         category = classify_food(
-            protein_per_100g=2.7, carbs_per_100g=26, fat_per_100g=1,
-            fiber_per_100g=1.6, energy_per_100g=123, description="Rice, cooked"
+            protein_per_100g=2.7,
+            carbs_per_100g=26,
+            fat_per_100g=1,
+            fiber_per_100g=1.6,
+            energy_per_100g=123,
+            description="Rice, cooked",
         )
         assert category == FoodCategory.CARB
 
@@ -41,8 +51,12 @@ class TestFoodClassification:
         """Test classifying vegetables (low energy, high fiber)."""
         # Broccoli: ~2.8g protein, ~7g carbs, ~0.4g fat, 2.6g fiber per 100g
         category = classify_food(
-            protein_per_100g=2.8, carbs_per_100g=7, fat_per_100g=0.4,
-            fiber_per_100g=2.6, energy_per_100g=34, description="Broccoli, raw"
+            protein_per_100g=2.8,
+            carbs_per_100g=7,
+            fat_per_100g=0.4,
+            fiber_per_100g=2.6,
+            energy_per_100g=34,
+            description="Broccoli, raw",
         )
         assert category == FoodCategory.VEGETABLE
 
@@ -50,8 +64,12 @@ class TestFoodClassification:
         """Test classifying legumes (decent protein + fiber)."""
         # Lentils: ~9g protein, ~20g carbs, ~0.4g fat, ~8g fiber per 100g
         category = classify_food(
-            protein_per_100g=9, carbs_per_100g=20, fat_per_100g=0.4,
-            fiber_per_100g=8, energy_per_100g=116, description="Lentils, cooked"
+            protein_per_100g=9,
+            carbs_per_100g=20,
+            fat_per_100g=0.4,
+            fiber_per_100g=8,
+            energy_per_100g=116,
+            description="Lentils, cooked",
         )
         assert category == FoodCategory.LEGUME
 
@@ -59,8 +77,12 @@ class TestFoodClassification:
         """Test that legume keywords help classification."""
         # Black beans with moderate stats
         category = classify_food(
-            protein_per_100g=8, carbs_per_100g=24, fat_per_100g=0.5,
-            fiber_per_100g=7, energy_per_100g=132, description="Black beans, canned"
+            protein_per_100g=8,
+            carbs_per_100g=24,
+            fat_per_100g=0.5,
+            fiber_per_100g=7,
+            energy_per_100g=132,
+            description="Black beans, canned",
         )
         assert category == FoodCategory.LEGUME
 
@@ -80,8 +102,12 @@ class TestFoodClassification:
         """Test classifying fruits (carbs, low fat, low protein)."""
         # Apple: ~0.3g protein, ~14g carbs, ~0.2g fat, 2.4g fiber per 100g
         category = classify_food(
-            protein_per_100g=0.3, carbs_per_100g=14, fat_per_100g=0.2,
-            fiber_per_100g=2.4, energy_per_100g=52, description="Apple, raw"
+            protein_per_100g=0.3,
+            carbs_per_100g=14,
+            fat_per_100g=0.2,
+            fiber_per_100g=2.4,
+            energy_per_100g=52,
+            description="Apple, raw",
         )
         assert category == FoodCategory.FRUIT
 
@@ -91,8 +117,12 @@ class TestFoodClassification:
         # Fat cals: 10*9=90, Protein cals: 13*4=52, Carb cals: 0.7*4=2.8
         # Fat is ~62% of calories, so classified as FAT
         category = classify_food(
-            protein_per_100g=13, carbs_per_100g=0.7, fat_per_100g=10,
-            fiber_per_100g=0, energy_per_100g=143, description="Eggs, whole"
+            protein_per_100g=13,
+            carbs_per_100g=0.7,
+            fat_per_100g=10,
+            fiber_per_100g=0,
+            energy_per_100g=143,
+            description="Eggs, whole",
         )
         # Eggs are classified by calorie composition (fat dominant)
         assert category in (FoodCategory.FAT, FoodCategory.PROTEIN, FoodCategory.MIXED)

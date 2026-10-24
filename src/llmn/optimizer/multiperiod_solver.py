@@ -9,22 +9,18 @@ from __future__ import annotations
 
 import sqlite3
 import time
-from typing import Optional
 
 import numpy as np
 from qpsolvers import Problem, solve_problem
 
-from llmn.db.queries import NutrientQueries
 from llmn.optimizer.multiperiod_constraints import MultiPeriodConstraintBuilder
 from llmn.optimizer.multiperiod_diagnosis import diagnose_multiperiod_infeasibility
 from llmn.optimizer.multiperiod_models import (
-    InfeasibilityDiagnosis,
     MealFoodResult,
     MealResult,
     MultiPeriodRequest,
     MultiPeriodResult,
 )
-
 
 # Standard nutrient IDs
 ENERGY_ID = 1008  # Calories
@@ -135,9 +131,7 @@ def solve_multiperiod_diet(
 
     if verbose:
         solver_info["z"] = solution.z.tolist() if solution.z is not None else None
-        solver_info["z_box"] = (
-            solution.z_box.tolist() if solution.z_box is not None else None
-        )
+        solver_info["z_box"] = solution.z_box.tolist() if solution.z_box is not None else None
         solver_info["constraint_info"] = data["constraint_info"]
 
     # Check for data quality warnings
@@ -173,7 +167,6 @@ def _parse_solution_to_meals(
         List of MealResult objects, one per meal
     """
     n_foods = data["n_foods"]
-    n_meals = data["n_meals"]
     nutrient_ids = data["nutrient_ids"]
     nutrient_matrix = data["nutrient_matrix"]
     food_ids = data["food_ids"]

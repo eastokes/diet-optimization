@@ -100,15 +100,9 @@ def solve_lp(
     if return_kkt and result.success:
         ret["kkt"] = {
             "slack": getattr(result, "slack", None),
-            "ineqlin_marginals": (
-                result.ineqlin.marginals if hasattr(result, "ineqlin") else None
-            ),
-            "lower_marginals": (
-                result.lower.marginals if hasattr(result, "lower") else None
-            ),
-            "upper_marginals": (
-                result.upper.marginals if hasattr(result, "upper") else None
-            ),
+            "ineqlin_marginals": (result.ineqlin.marginals if hasattr(result, "ineqlin") else None),
+            "lower_marginals": (result.lower.marginals if hasattr(result, "lower") else None),
+            "upper_marginals": (result.upper.marginals if hasattr(result, "upper") else None),
             "constraint_map": constraint_map,
         }
 
@@ -156,7 +150,8 @@ def solve_qp(
     # Build QP in standard form: min 0.5 * x'Px + q'x
     # Our objective: lambda_cost * c'x + lambda_deviation * ||x - x_bar||^2
     #              = lambda_cost * c'x + lambda_deviation * (x'x - 2*x_bar'x + x_bar'x_bar)
-    #              = lambda_deviation * x'Ix + (lambda_cost * c - 2*lambda_deviation*x_bar)'x + const
+    #              = lambda_deviation * x'Ix
+    #                + (lambda_cost * c - 2*lambda_deviation*x_bar)'x + const
     # Standard form: 0.5 * x'Px + q'x
     # So: P = 2 * lambda_deviation * I, q = lambda_cost * c - 2 * lambda_deviation * x_bar
 
@@ -240,28 +235,34 @@ def solve_qp(
                 # For Ax <= max, the multiplier z[i] >= 0 when active
                 mult = float(z[i]) if z is not None else None
 
-            constraint_values.append({
-                "type": constraint_type,
-                "nutrient_index": nutrient_idx,
-                "bound": bound,
-                "value": nutrient_value,
-                "slack": slack,
-                "multiplier": mult,
-            })
+            constraint_values.append(
+                {
+                    "type": constraint_type,
+                    "nutrient_index": nutrient_idx,
+                    "bound": bound,
+                    "value": nutrient_value,
+                    "slack": slack,
+                    "multiplier": mult,
+                }
+            )
 
         # Compute objective gradient for stationarity check
         # ∇f = ∂/∂x [0.5 x'Px + q'x] = Px + q = 2*lambda_deviation*x + q
         objective_grad = P @ x + q
 
         ret["kkt"] = {
-            "z": z,                      # Inequality constraint multipliers
-            "z_box": z_box,              # Bound multipliers (key improvement!)
+            "z": z,  # Inequality constraint multipliers
+            "z_box": z_box,  # Bound multipliers (key improvement!)
             "constraint_values": constraint_values,
             "constraint_map": constraint_map,
             "objective_grad": objective_grad,
             "G": G.toarray() if G is not None else None,  # Dense for KKT computation
-            "primal_residual": solution.primal_residual() if hasattr(solution, 'primal_residual') else None,
-            "dual_residual": solution.dual_residual() if hasattr(solution, 'dual_residual') else None,
+            "primal_residual": solution.primal_residual()
+            if hasattr(solution, "primal_residual")
+            else None,
+            "dual_residual": solution.dual_residual()
+            if hasattr(solution, "dual_residual")
+            else None,
         }
 
     return ret
@@ -302,7 +303,6 @@ def build_kkt_analysis(
 
     # For LP, we have direct access to slack and multipliers
     if solver_type == "lp_highs":
-        slack = kkt_data.get("slack")
         marginals = kkt_data.get("ineqlin_marginals")
         constraint_map = kkt_data.get("constraint_map", [])
         lower_marginals = kkt_data.get("lower_marginals")
@@ -534,9 +534,7 @@ def solve_diet_problem(
         )
 
     # Get nutrient names for results
-    nutrient_names = NutrientQueries.get_nutrient_names(
-        conn, constraint_data["nutrient_ids"]
-    )
+    nutrient_names = NutrientQueries.get_nutrient_names(conn, constraint_data["nutrient_ids"])
 
     # Choose solver based on request mode
     n_foods = len(constraint_data["food_ids"])

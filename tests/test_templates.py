@@ -11,13 +11,11 @@ from llmn.templates.definitions import (
     list_available_templates,
 )
 from llmn.templates.models import (
-    DietTemplate,
     DiversityRule,
     SelectionStrategy,
 )
 from llmn.templates.optimizer import run_template_optimization
 from llmn.templates.selector import (
-    get_candidates_for_slot,
     select_foods_for_template,
 )
 

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -95,16 +93,18 @@ def tracking_failure(command: str, error: Exception, json_output: bool) -> None:
         suggestions = []
 
     if json_output:
-        output_json({
-            "success": False,
-            "command": command,
-            "data": {},
-            "errors": [message],
-            "error_codes": [code],
-            "suggestions": suggestions,
-            "schema_version": 2,
-            "human_summary": f"Error: {message}",
-        })
+        output_json(
+            {
+                "success": False,
+                "command": command,
+                "data": {},
+                "errors": [message],
+                "error_codes": [code],
+                "suggestions": suggestions,
+                "schema_version": 2,
+                "human_summary": f"Error: {message}",
+            }
+        )
     else:
         console.print(f"[red]{message}[/red]")
         for suggestion in suggestions:
@@ -186,15 +186,9 @@ def patterns_callback() -> None:
 
 @app.command()
 def init(
-    usda_path: Path = typer.Argument(
-        ..., help="Path to USDA FoodData Central CSV directory"
-    ),
-    db_path: Optional[Path] = typer.Option(
-        None, "--db", help="Custom database path"
-    ),
-    json_output: bool = typer.Option(
-        False, "--json", help="Output as JSON"
-    ),
+    usda_path: Path = typer.Argument(..., help="Path to USDA FoodData Central CSV directory"),
+    db_path: Path | None = typer.Option(None, "--db", help="Custom database path"),
+    json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Initialize database from USDA data."""
     from llmn.data.usda_loader import USDALoader
@@ -226,18 +220,23 @@ def init(
         with db.get_connection() as conn:
             loader = USDALoader(usda_path, conn)
             counts = loader.load_all(data_types)
-        output_json({
-            "success": True,
-            "command": "init",
-            "data": {
-                "db_path": str(db.db_path),
-                "foods_loaded": counts["foods"],
-                "nutrients_loaded": counts["nutrients"],
-                "food_nutrients_loaded": counts["food_nutrients"],
-                "servings_loaded": counts.get("servings", 0),
-            },
-            "human_summary": f"Loaded {counts['foods']} foods with {counts['food_nutrients']} nutrient records",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "init",
+                "data": {
+                    "db_path": str(db.db_path),
+                    "foods_loaded": counts["foods"],
+                    "nutrients_loaded": counts["nutrients"],
+                    "food_nutrients_loaded": counts["food_nutrients"],
+                    "servings_loaded": counts.get("servings", 0),
+                },
+                "human_summary": (
+                    f"Loaded {counts['foods']} foods with "
+                    f"{counts['food_nutrients']} nutrient records"
+                ),
+            }
+        )
     else:
         with console.status("[bold green]Loading data...") as status:
             with db.get_connection() as conn:
@@ -271,25 +270,27 @@ def search(
         results = FoodQueries.search_foods(conn, query, limit)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "search",
-            "data": {
-                "query": query,
-                "results": [
-                    {
-                        "fdc_id": row["fdc_id"],
-                        "description": row["description"],
-                        "data_type": row["data_type"],
-                        "price_per_100g": row["price_per_100g"],
-                        "tags": row["tags"].split(", ") if row["tags"] else [],
-                    }
-                    for row in results
-                ],
-                "total_matches": len(results),
-            },
-            "human_summary": f"Found {len(results)} foods matching '{query}'",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "search",
+                "data": {
+                    "query": query,
+                    "results": [
+                        {
+                            "fdc_id": row["fdc_id"],
+                            "description": row["description"],
+                            "data_type": row["data_type"],
+                            "price_per_100g": row["price_per_100g"],
+                            "tags": row["tags"].split(", ") if row["tags"] else [],
+                        }
+                        for row in results
+                    ],
+                    "total_matches": len(results),
+                },
+                "human_summary": f"Found {len(results)} foods matching '{query}'",
+            }
+        )
         return
 
     if not results:
@@ -304,8 +305,8 @@ def search(
     table.add_column("Tags", style="blue")
 
     for row in results:
-        price_str = f"${row['price_per_100g']:.2f}" if row['price_per_100g'] is not None else ""
-        tags_str = row['tags'] if row['tags'] else ""
+        price_str = f"${row['price_per_100g']:.2f}" if row["price_per_100g"] is not None else ""
+        tags_str = row["tags"] if row["tags"] else ""
         table.add_row(
             str(row["fdc_id"]),
             row["description"],
@@ -330,12 +331,14 @@ def info(
         food = FoodQueries.get_food_by_id(conn, fdc_id)
         if not food:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "info",
-                    "errors": [f"Food with FDC ID {fdc_id} not found"],
-                    "suggestions": ["Use 'llmn search <query>' to find valid FDC IDs"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "info",
+                        "errors": [f"Food with FDC ID {fdc_id} not found"],
+                        "suggestions": ["Use 'llmn search <query>' to find valid FDC IDs"],
+                    }
+                )
             else:
                 console.print(f"[red]Food with FDC ID {fdc_id} not found[/red]")
             raise typer.Exit(1)
@@ -345,29 +348,31 @@ def info(
         tags = TagQueries.get_tags_for_food(conn, fdc_id)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "info",
-            "data": {
-                "fdc_id": fdc_id,
-                "description": food["description"],
-                "data_type": food["data_type"],
-                "is_active": bool(food["is_active"]),
-                "price_per_100g": price["price_per_100g"] if price else None,
-                "price_source": price["price_source"] if price else None,
-                "tags": tags,
-                "nutrients": [
-                    {
-                        "nutrient_id": row["nutrient_id"],
-                        "name": row["display_name"] or row["name"],
-                        "amount": row["amount"],
-                        "unit": row["unit"],
-                    }
-                    for row in nutrients
-                ],
-            },
-            "human_summary": f"{food['description']}: {len(nutrients)} nutrients",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "info",
+                "data": {
+                    "fdc_id": fdc_id,
+                    "description": food["description"],
+                    "data_type": food["data_type"],
+                    "is_active": bool(food["is_active"]),
+                    "price_per_100g": price["price_per_100g"] if price else None,
+                    "price_source": price["price_source"] if price else None,
+                    "tags": tags,
+                    "nutrients": [
+                        {
+                            "nutrient_id": row["nutrient_id"],
+                            "name": row["display_name"] or row["name"],
+                            "amount": row["amount"],
+                            "unit": row["unit"],
+                        }
+                        for row in nutrients
+                    ],
+                },
+                "human_summary": f"{food['description']}: {len(nutrients)} nutrients",
+            }
+        )
         return
 
     console.print(f"\n[bold]{food['description']}[/bold]")
@@ -404,22 +409,20 @@ def info(
 
 @app.command()
 def optimize(
-    profile: Optional[str] = typer.Option(
-        None, "--profile", "-p", help="Constraint profile name"
-    ),
-    profile_file: Optional[Path] = typer.Option(
-        None, "--file", "-f", help="YAML constraint file"
-    ),
-    foods: Optional[str] = typer.Option(
+    profile: str | None = typer.Option(None, "--profile", "-p", help="Constraint profile name"),
+    profile_file: Path | None = typer.Option(None, "--file", "-f", help="YAML constraint file"),
+    foods: str | None = typer.Option(
         None, "--foods", help="Comma-separated FDC IDs to include (bypasses tag filtering)"
     ),
-    pattern: Optional[list[str]] = typer.Option(
+    pattern: list[str] | None = typer.Option(
         None, "--pattern", help="Dietary pattern (pescatarian, keto, slow_carb, etc). Repeatable."
     ),
-    min_protein: Optional[float] = typer.Option(
-        None, "--min-protein", help="Minimum protein per 100g for pattern foods (e.g., 10 for high-protein pool)"
+    min_protein: float | None = typer.Option(
+        None,
+        "--min-protein",
+        help="Minimum protein per 100g for pattern foods (e.g., 10 for high-protein pool)",
     ),
-    goal: Optional[str] = typer.Option(
+    goal: str | None = typer.Option(
         None, "--goal", help="Body comp goal, e.g. 'fat_loss:185lbs:165lbs' or 'maintenance'"
     ),
     days: int = typer.Option(1, "--days", "-d", help="Number of days to plan"),
@@ -436,8 +439,10 @@ def optimize(
     max_foods: int = typer.Option(
         300, "--max-foods", help="Maximum foods to consider (randomly sampled if exceeded)"
     ),
-    max_foods_in_solution: Optional[int] = typer.Option(
-        None, "--max-foods-in-solution", help="Limit distinct foods in solution (uses two-phase solver)"
+    max_foods_in_solution: int | None = typer.Option(
+        None,
+        "--max-foods-in-solution",
+        help="Limit distinct foods in solution (uses two-phase solver)",
     ),
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Display KKT optimality conditions"
@@ -446,47 +451,59 @@ def optimize(
         False, "--json", help="Output as JSON with agent-friendly envelope"
     ),
     allocate_meals: bool = typer.Option(
-        False, "--allocate-meals", help="Distribute foods into meal slots (breakfast/lunch/dinner/snack)"
+        False,
+        "--allocate-meals",
+        help="Distribute foods into meal slots (breakfast/lunch/dinner/snack)",
     ),
     multiperiod: bool = typer.Option(
-        False, "--multiperiod", "-m", help="Use multi-period solver (auto-detected if profile has 'meals' section)"
+        False,
+        "--multiperiod",
+        "-m",
+        help="Use multi-period solver (auto-detected if profile has 'meals' section)",
     ),
     include_all_foods: bool = typer.Option(
-        False, "--include-all-foods", help="Use full USDA database instead of curated staples (may include exotic foods)"
+        False,
+        "--include-all-foods",
+        help="Use full USDA database instead of curated staples (may include exotic foods)",
     ),
     template: bool = typer.Option(
-        False, "--template", "-t", help="Use template-based meal composition (recommended for realistic meals)"
+        False,
+        "--template",
+        "-t",
+        help="Use template-based meal composition (recommended for realistic meals)",
     ),
-    seed: Optional[int] = typer.Option(
+    seed: int | None = typer.Option(
         None, "--seed", help="Random seed for template-based selection (for reproducibility)"
     ),
     use_profile: bool = typer.Option(
-        False, "--use-profile", help="Use user profile data for calorie/protein targets (requires profile with goal set)"
+        False,
+        "--use-profile",
+        help="Use user profile data for calorie/protein targets (requires profile with goal set)",
     ),
 ) -> None:
     """Run meal plan optimization."""
     require_food_data()
 
     from llmn.agent.response import create_response
-    from llmn.export.formatters import format_result
     from llmn.explore.diagnosis import diagnose_infeasibility
+    from llmn.export.formatters import format_result
     from llmn.optimizer.constraints import (
         deserialize_profile_json,
         has_meals_section,
         load_multiperiod_profile_from_yaml,
         load_profile_from_yaml,
     )
-    from llmn.optimizer.models import OptimizationRequest, NutrientConstraint
-    from llmn.optimizer.multiperiod_solver import solve_multiperiod_diet
+    from llmn.optimizer.models import NutrientConstraint, OptimizationRequest
     from llmn.optimizer.multiperiod_models import (
         MultiPeriodRequest,
         derive_default_meal_configs,
     )
+    from llmn.optimizer.multiperiod_solver import solve_multiperiod_diet
     from llmn.optimizer.solver import solve_diet_problem
 
     db = get_db()
-    profile_id: Optional[int] = None
-    profile_name: Optional[str] = None
+    profile_id: int | None = None
+    profile_name: str | None = None
 
     # Determine if we should use multi-period solver
     use_multiperiod = multiperiod
@@ -497,15 +514,17 @@ def optimize(
         # Load from YAML file
         if not profile_file.exists():
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": [f"Profile file not found: {profile_file}"],
-                    "suggestions": [
-                        "Check the file path",
-                        "Use 'llmn profile list' to see saved profiles",
-                    ],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": [f"Profile file not found: {profile_file}"],
+                        "suggestions": [
+                            "Check the file path",
+                            "Use 'llmn profile list' to see saved profiles",
+                        ],
+                    }
+                )
             else:
                 console.print(f"[red]Profile file not found: {profile_file}[/red]")
             raise typer.Exit(1)
@@ -529,15 +548,17 @@ def optimize(
             profile_row = ProfileQueries.get_profile_by_name(conn, profile)
             if not profile_row:
                 if json_output:
-                    output_json({
-                        "success": False,
-                        "command": "optimize",
-                        "errors": [f"Profile not found: {profile}"],
-                        "suggestions": [
-                            "Use 'llmn profile list' to see available profiles",
-                            "Use 'llmn profile create' to create a new profile",
-                        ],
-                    })
+                    output_json(
+                        {
+                            "success": False,
+                            "command": "optimize",
+                            "errors": [f"Profile not found: {profile}"],
+                            "suggestions": [
+                                "Use 'llmn profile list' to see available profiles",
+                                "Use 'llmn profile create' to create a new profile",
+                            ],
+                        }
+                    )
                 else:
                     console.print(f"[red]Profile not found: {profile}[/red]")
                 raise typer.Exit(1)
@@ -575,7 +596,9 @@ def optimize(
         )
 
         if not json_output:
-            console.print("[dim]Created default multi-period config (25/35/35/5% meal splits)[/dim]")
+            console.print(
+                "[dim]Created default multi-period config (25/35/35/5% meal splits)[/dim]"
+            )
 
     # Override mode if --minimize-cost flag is set
     if minimize_cost:
@@ -592,29 +615,40 @@ def optimize(
                 console.print(f"[dim]Using explicit food pool: {len(food_ids)} foods[/dim]")
         except ValueError:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": [f"Invalid --foods format: {foods}"],
-                    "suggestions": ["Use comma-separated numeric FDC IDs, e.g., --foods 175167,171287,172421"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": [f"Invalid --foods format: {foods}"],
+                        "suggestions": [
+                            "Use comma-separated numeric FDC IDs, "
+                            "e.g., --foods 175167,171287,172421"
+                        ],
+                    }
+                )
             else:
                 console.print(f"[red]Invalid --foods format: {foods}[/red]")
-                console.print("[red]Use comma-separated numeric FDC IDs, e.g., --foods 175167,171287,172421[/red]")
+                console.print(
+                    "[red]Use comma-separated numeric FDC IDs, "
+                    "e.g., --foods 175167,171287,172421[/red]"
+                )
             raise typer.Exit(1)
 
     # Mutual exclusivity: --use-profile and --goal cannot be used together
     if use_profile and goal:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "optimize",
-                "errors": ["Cannot use both --use-profile and --goal"],
-                "suggestions": [
-                    "Use --use-profile to auto-derive targets from your stored user profile",
-                    "Or use --goal to specify targets directly (e.g., --goal fat_loss:185lbs:165lbs)",
-                ],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "optimize",
+                    "errors": ["Cannot use both --use-profile and --goal"],
+                    "suggestions": [
+                        "Use --use-profile to auto-derive targets from your stored user profile",
+                        "Or use --goal to specify targets directly "
+                        "(e.g., --goal fat_loss:185lbs:165lbs)",
+                    ],
+                }
+            )
         else:
             console.print("[red]Cannot use both --use-profile and --goal[/red]")
             console.print("Use --use-profile to auto-derive targets from your stored user profile")
@@ -623,45 +657,57 @@ def optimize(
 
     # Handle --use-profile flag to auto-derive targets from user profile
     if use_profile:
-        from llmn.tracking.queries import UserQueries
-        from llmn.profiles.body_calc import calculate_targets, parse_goal_string
-        from llmn.optimizer.models import NutrientConstraint
         from llmn.data.nutrient_ids import NUTRIENT_IDS
+        from llmn.optimizer.models import NutrientConstraint
+        from llmn.profiles.body_calc import calculate_targets, parse_goal_string
+        from llmn.tracking.queries import UserQueries
 
         with db.get_connection() as conn:
             user_profile = UserQueries.get_default_user(conn)
 
         if user_profile is None:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": ["No user profile found"],
-                    "suggestions": [
-                        "Create a profile with: llmn user create --age 35 --sex male --height 70 --weight 180 --activity moderate",
-                        "Then set a goal with: llmn user update --goal 'fat_loss:180:165'",
-                        "Or use --goal flag instead of --use-profile",
-                    ],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": ["No user profile found"],
+                        "suggestions": [
+                            "Create a profile with: llmn user create --age 35 --sex male "
+                            "--height 70 --weight 180 --activity moderate",
+                            "Then set a goal with: llmn user update --goal 'fat_loss:180:165'",
+                            "Or use --goal flag instead of --use-profile",
+                        ],
+                    }
+                )
             else:
                 console.print("[red]No user profile found[/red]")
-                console.print("Create one with: llmn user create --age 35 --sex male --height 70 --weight 180 --activity moderate")
+                console.print(
+                    "Create one with: llmn user create --age 35 --sex male "
+                    "--height 70 --weight 180 --activity moderate"
+                )
             raise typer.Exit(1)
 
         if user_profile.goal is None:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": ["User profile exists but has no goal set"],
-                    "suggestions": [
-                        f"Set a goal with: llmn user update --goal 'fat_loss:{user_profile.weight_lbs:.0f}:TARGET_WEIGHT'",
-                        "Or use --goal flag instead of --use-profile",
-                    ],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": ["User profile exists but has no goal set"],
+                        "suggestions": [
+                            f"Set a goal with: llmn user update --goal "
+                            f"'fat_loss:{user_profile.weight_lbs:.0f}:TARGET_WEIGHT'",
+                            "Or use --goal flag instead of --use-profile",
+                        ],
+                    }
+                )
             else:
                 console.print("[red]User profile exists but has no goal set[/red]")
-                console.print(f"Set a goal with: llmn user update --goal 'fat_loss:{user_profile.weight_lbs:.0f}:TARGET_WEIGHT'")
+                console.print(
+                    f"Set a goal with: llmn user update --goal "
+                    f"'fat_loss:{user_profile.weight_lbs:.0f}:TARGET_WEIGHT'"
+                )
             raise typer.Exit(1)
 
         # Parse goal from profile
@@ -670,16 +716,23 @@ def optimize(
             goal_type = parsed["goal"]
         except (ValueError, KeyError) as e:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": [f"Invalid goal format in user profile: {user_profile.goal}. Error: {e}"],
-                    "suggestions": [
-                        "Update goal with: llmn user update --goal 'fat_loss:CURRENT_WEIGHT:TARGET_WEIGHT'",
-                    ],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": [
+                            f"Invalid goal format in user profile: {user_profile.goal}. Error: {e}"
+                        ],
+                        "suggestions": [
+                            "Update goal with: llmn user update --goal "
+                            "'fat_loss:CURRENT_WEIGHT:TARGET_WEIGHT'",
+                        ],
+                    }
+                )
             else:
-                console.print(f"[red]Invalid goal format in user profile: {user_profile.goal}[/red]")
+                console.print(
+                    f"[red]Invalid goal format in user profile: {user_profile.goal}[/red]"
+                )
             raise typer.Exit(1)
 
         # Calculate targets using ACTUAL profile data
@@ -710,25 +763,28 @@ def optimize(
             mp_request.daily_nutrient_constraints = list(request.nutrient_constraints)
             # Regenerate meal configs with new calorie range
             meal_configs = derive_default_meal_configs(
-                (targets.calories_min, targets.calories_max),
-                request.nutrient_constraints
+                (targets.calories_min, targets.calories_max), request.nutrient_constraints
             )
             mp_request.meals = meal_configs
 
         if not json_output:
-            console.print(f"[dim]Using profile: {user_profile.sex}, {user_profile.age}y, "
-                        f"{user_profile.height_inches}in, {user_profile.weight_lbs}lbs, "
-                        f"{user_profile.activity_level}[/dim]")
-            console.print(f"[dim]Goal '{goal_type}': {targets.calories_min}-{targets.calories_max} kcal, "
-                        f"{targets.protein_min}-{targets.protein_max}g protein[/dim]")
+            console.print(
+                f"[dim]Using profile: {user_profile.sex}, {user_profile.age}y, "
+                f"{user_profile.height_inches}in, {user_profile.weight_lbs}lbs, "
+                f"{user_profile.activity_level}[/dim]"
+            )
+            console.print(
+                f"[dim]Goal '{goal_type}': {targets.calories_min}-{targets.calories_max} kcal, "
+                f"{targets.protein_min}-{targets.protein_max}g protein[/dim]"
+            )
             if targets.projected_weeks:
                 console.print(f"[dim]Projected timeline: {targets.projected_weeks} weeks[/dim]")
 
     # Handle --goal flag for body composition targets
     if goal:
-        from llmn.profiles.body_calc import calculate_targets, parse_goal_string
-        from llmn.optimizer.models import NutrientConstraint
         from llmn.data.nutrient_ids import NUTRIENT_IDS
+        from llmn.optimizer.models import NutrientConstraint
+        from llmn.profiles.body_calc import calculate_targets, parse_goal_string
 
         try:
             parsed = parse_goal_string(goal)
@@ -763,32 +819,40 @@ def optimize(
                 mp_request.daily_nutrient_constraints = list(request.nutrient_constraints)
                 # Regenerate meal configs with new calorie range
                 meal_configs = derive_default_meal_configs(
-                    (targets.calories_min, targets.calories_max),
-                    request.nutrient_constraints
+                    (targets.calories_min, targets.calories_max), request.nutrient_constraints
                 )
                 mp_request.meals = meal_configs
 
             if not json_output:
-                console.print(f"[dim]Goal '{parsed['goal']}': {targets.calories_min}-{targets.calories_max} kcal, "
-                            f"{targets.protein_min}-{targets.protein_max}g protein[/dim]")
+                console.print(
+                    f"[dim]Goal '{parsed['goal']}': "
+                    f"{targets.calories_min}-{targets.calories_max} kcal, "
+                    f"{targets.protein_min}-{targets.protein_max}g protein[/dim]"
+                )
                 if targets.projected_weeks:
                     console.print(f"[dim]Projected timeline: {targets.projected_weeks} weeks[/dim]")
 
         except (ValueError, KeyError) as e:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "optimize",
-                    "errors": [f"Invalid --goal format: {goal}. Error: {e}"],
-                    "suggestions": [
-                        "Use format: goal:weight:target_weight",
-                        "Example: --goal fat_loss:185lbs:165lbs",
-                        "Available goals: fat_loss, aggressive_fat_loss, maintenance, lean_gain, muscle_gain",
-                    ],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "optimize",
+                        "errors": [f"Invalid --goal format: {goal}. Error: {e}"],
+                        "suggestions": [
+                            "Use format: goal:weight:target_weight",
+                            "Example: --goal fat_loss:185lbs:165lbs",
+                            "Available goals: fat_loss, aggressive_fat_loss, "
+                            "maintenance, lean_gain, muscle_gain",
+                        ],
+                    }
+                )
             else:
                 console.print(f"[red]Invalid --goal format: {goal}[/red]")
-                console.print("[red]Use format: goal:weight:target_weight (e.g., fat_loss:185lbs:165lbs)[/red]")
+                console.print(
+                    "[red]Use format: goal:weight:target_weight "
+                    "(e.g., fat_loss:185lbs:165lbs)[/red]"
+                )
             raise typer.Exit(1)
 
     # Run optimization with verbose output
@@ -810,12 +874,14 @@ def optimize(
 
                 if not pattern_food_ids:
                     if json_output:
-                        output_json({
-                            "success": False,
-                            "command": "optimize",
-                            "errors": [f"No foods found matching patterns: {pattern}"],
-                            "suggestions": ["Check pattern names with 'llmn patterns list'"],
-                        })
+                        output_json(
+                            {
+                                "success": False,
+                                "command": "optimize",
+                                "errors": [f"No foods found matching patterns: {pattern}"],
+                                "suggestions": ["Check pattern names with 'llmn patterns list'"],
+                            }
+                        )
                     else:
                         console.print(f"[red]No foods found matching patterns: {pattern}[/red]")
                     raise typer.Exit(1)
@@ -826,47 +892,74 @@ def optimize(
 
                 if not json_output:
                     source = "staples" if not include_all_foods else "full USDA"
-                    console.print(f"[dim]Pattern '{'+'.join(pattern)}' ({source}): {len(pattern_food_ids)} foods[/dim]")
+                    console.print(
+                        f"[dim]Pattern '{'+'.join(pattern)}' ({source}): "
+                        f"{len(pattern_food_ids)} foods[/dim]"
+                    )
 
             except ValueError as e:
                 if json_output:
-                    output_json({
-                        "success": False,
-                        "command": "optimize",
-                        "errors": [str(e)],
-                        "suggestions": ["Available patterns: pescatarian, vegetarian, vegan, keto, slow_carb, mediterranean, paleo, whole30"],
-                    })
+                    output_json(
+                        {
+                            "success": False,
+                            "command": "optimize",
+                            "errors": [str(e)],
+                            "suggestions": [
+                                "Available patterns: pescatarian, vegetarian, vegan, "
+                                "keto, slow_carb, mediterranean, paleo, whole30"
+                            ],
+                        }
+                    )
                 else:
                     console.print(f"[red]{e}[/red]")
                 raise typer.Exit(1)
 
         # Template-based optimization path (recommended for realistic meals)
         if template:
-            from llmn.templates.optimizer import run_template_optimization
             from llmn.templates.models import SelectionStrategy
+            from llmn.templates.optimizer import run_template_optimization
 
             if not pattern:
                 if json_output:
-                    output_json({
-                        "success": False,
-                        "command": "optimize",
-                        "errors": ["--template requires --pattern to be specified"],
-                        "suggestions": [
-                            "Add --pattern pescatarian --pattern slow_carb",
-                            "Available patterns: pescatarian, vegetarian, vegan, keto, slow_carb, mediterranean, paleo, whole30",
-                        ],
-                    })
+                    output_json(
+                        {
+                            "success": False,
+                            "command": "optimize",
+                            "errors": ["--template requires --pattern to be specified"],
+                            "suggestions": [
+                                "Add --pattern pescatarian --pattern slow_carb",
+                                "Available patterns: pescatarian, vegetarian, vegan, "
+                                "keto, slow_carb, mediterranean, paleo, whole30",
+                            ],
+                        }
+                    )
                 else:
                     console.print("[red]--template requires --pattern to be specified[/red]")
                 raise typer.Exit(1)
 
             # Get calorie/protein targets from request
             cal_min, cal_max = request.calorie_range if request.calorie_range else (1800, 2200)
-            prot_min = next((n.min_value for n in request.nutrient_constraints if n.nutrient_id == 1003 and n.min_value), 150)
-            prot_max = next((n.max_value for n in request.nutrient_constraints if n.nutrient_id == 1003 and n.max_value), 200)
+            prot_min = next(
+                (
+                    n.min_value
+                    for n in request.nutrient_constraints
+                    if n.nutrient_id == 1003 and n.min_value
+                ),
+                150,
+            )
+            prot_max = next(
+                (
+                    n.max_value
+                    for n in request.nutrient_constraints
+                    if n.nutrient_id == 1003 and n.max_value
+                ),
+                200,
+            )
 
             if not json_output:
-                console.print(f"[dim]Using template-based optimization for {'+'.join(pattern)}[/dim]")
+                console.print(
+                    f"[dim]Using template-based optimization for {'+'.join(pattern)}[/dim]"
+                )
 
             template_result = run_template_optimization(
                 conn=conn,
@@ -922,56 +1015,81 @@ def optimize(
                             f"{template_result.daily_protein:.0f}g protein"
                         ),
                     }
-                    output_json(create_response(
-                        success=True,
-                        command="optimize",
-                        data=response_data,
-                        warnings=[],
-                        suggestions=[],
-                        human_summary=response_data["human_summary"],
-                    ).to_dict())
+                    output_json(
+                        create_response(
+                            success=True,
+                            command="optimize",
+                            data=response_data,
+                            warnings=[],
+                            suggestions=[],
+                            human_summary=response_data["human_summary"],
+                        ).to_dict()
+                    )
                 else:
-                    output_json(create_response(
-                        success=False,
-                        command="optimize",
-                        data={},
-                        errors=[template_result.message],
-                        suggestions=["Try a different --pattern combination or relax constraints"],
-                        human_summary=f"Failed: {template_result.message}",
-                    ).to_dict())
+                    output_json(
+                        create_response(
+                            success=False,
+                            command="optimize",
+                            data={},
+                            errors=[template_result.message],
+                            suggestions=[
+                                "Try a different --pattern combination or relax constraints"
+                            ],
+                            human_summary=f"Failed: {template_result.message}",
+                        ).to_dict()
+                    )
                 raise typer.Exit(0 if template_result.success else 1)
             else:
                 # Rich table output for template results
                 if template_result.success:
-                    console.print(Panel(
-                        f"Template: [bold]{template_result.template_name}[/bold]\n"
-                        f"Selection attempts: {template_result.selection_attempts}",
-                        title="Template-Based Meal Plan",
-                    ))
+                    console.print(
+                        Panel(
+                            f"Template: [bold]{template_result.template_name}[/bold]\n"
+                            f"Selection attempts: {template_result.selection_attempts}",
+                            title="Template-Based Meal Plan",
+                        )
+                    )
 
                     for meal in template_result.meals:
-                        table = Table(title=f"{meal.meal_type.value.capitalize()} ({meal.total_calories:.0f} kcal)")
+                        table = Table(
+                            title=(
+                                f"{meal.meal_type.value.capitalize()} "
+                                f"({meal.total_calories:.0f} kcal)"
+                            )
+                        )
                         table.add_column("Food", style="cyan")
                         table.add_column("Amount", justify="right")
                         table.add_column("Slot", style="dim")
 
                         for food in meal.foods:
                             # Truncate description if needed
-                            desc = food.description[:45] + "..." if len(food.description) > 48 else food.description
+                            desc = (
+                                food.description[:45] + "..."
+                                if len(food.description) > 48
+                                else food.description
+                            )
                             table.add_row(desc, f"{food.grams:.0f}g", food.slot_name)
 
                         console.print(table)
-                        console.print(f"[dim]P: {meal.total_protein:.0f}g | C: {meal.total_carbs:.0f}g | F: {meal.total_fat:.0f}g[/dim]\n")
+                        console.print(
+                            f"[dim]P: {meal.total_protein:.0f}g | "
+                            f"C: {meal.total_carbs:.0f}g | "
+                            f"F: {meal.total_fat:.0f}g[/dim]\n"
+                        )
 
-                    console.print(Panel(
-                        f"Calories: {template_result.daily_calories:.0f}\n"
-                        f"Protein: {template_result.daily_protein:.0f}g\n"
-                        f"Carbs: {template_result.daily_carbs:.0f}g\n"
-                        f"Fat: {template_result.daily_fat:.0f}g",
-                        title="Daily Totals",
-                    ))
+                    console.print(
+                        Panel(
+                            f"Calories: {template_result.daily_calories:.0f}\n"
+                            f"Protein: {template_result.daily_protein:.0f}g\n"
+                            f"Carbs: {template_result.daily_carbs:.0f}g\n"
+                            f"Fat: {template_result.daily_fat:.0f}g",
+                            title="Daily Totals",
+                        )
+                    )
                 else:
-                    console.print(f"[red]Template optimization failed: {template_result.message}[/red]")
+                    console.print(
+                        f"[red]Template optimization failed: {template_result.message}[/red]"
+                    )
 
                 raise typer.Exit(0 if template_result.success else 1)
 
@@ -986,7 +1104,10 @@ def optimize(
                     pass  # Already handled above
 
             if not json_output:
-                console.print(f"[dim]Running multi-period optimization with {len(mp_request.meals)} meals[/dim]")
+                console.print(
+                    f"[dim]Running multi-period optimization with "
+                    f"{len(mp_request.meals)} meals[/dim]"
+                )
 
             if json_output:
                 mp_result = solve_multiperiod_diet(mp_request, conn, verbose=verbose)
@@ -998,7 +1119,10 @@ def optimize(
             consolidated = None
             shopping = None
             if practical and mp_result.success:
-                from llmn.export.meal_consolidator import consolidate_result, consolidated_result_to_dict
+                from llmn.export.meal_consolidator import (
+                    consolidate_result,
+                    consolidated_result_to_dict,
+                )
                 from llmn.export.shopping_list import generate_shopping_list, shopping_list_to_dict
 
                 consolidated = consolidate_result(mp_result, max_foods_per_meal=5)
@@ -1017,7 +1141,9 @@ def optimize(
                 if mp_result.success:
                     if consolidated:
                         # Use consolidated output
-                        response_data["consolidated_meals"] = consolidated_result_to_dict(consolidated)["meals"]
+                        response_data["consolidated_meals"] = consolidated_result_to_dict(
+                            consolidated
+                        )["meals"]
                         response_data["shopping_list"] = shopping_list_to_dict(shopping)
                         response_data["daily_totals"] = {
                             k: float(round(v, 1)) for k, v in consolidated.daily_totals.items()
@@ -1061,19 +1187,27 @@ def optimize(
                     response_data["errors"] = [mp_result.message]
                     if mp_result.infeasibility_diagnosis:
                         response_data["diagnosis"] = {
-                            "conflicting_constraints": mp_result.infeasibility_diagnosis.conflicting_constraints,
-                            "suggested_relaxations": mp_result.infeasibility_diagnosis.suggested_relaxations,
+                            "conflicting_constraints": (
+                                mp_result.infeasibility_diagnosis.conflicting_constraints
+                            ),
+                            "suggested_relaxations": (
+                                mp_result.infeasibility_diagnosis.suggested_relaxations
+                            ),
                         }
                     response_data["human_summary"] = f"Failed: {mp_result.message}"
 
-                output_json(create_response(
-                    success=mp_result.success,
-                    command="optimize",
-                    data=response_data,
-                    errors=[mp_result.message] if not mp_result.success else [],
-                    suggestions=mp_result.infeasibility_diagnosis.suggested_relaxations if mp_result.infeasibility_diagnosis else [],
-                    human_summary=response_data.get("human_summary", ""),
-                ).to_dict())
+                output_json(
+                    create_response(
+                        success=mp_result.success,
+                        command="optimize",
+                        data=response_data,
+                        errors=[mp_result.message] if not mp_result.success else [],
+                        suggestions=mp_result.infeasibility_diagnosis.suggested_relaxations
+                        if mp_result.infeasibility_diagnosis
+                        else [],
+                        human_summary=response_data.get("human_summary", ""),
+                    ).to_dict()
+                )
             else:
                 # Console output for multi-period
                 # Panel and Table are imported at module level
@@ -1081,18 +1215,21 @@ def optimize(
                 if mp_result.success:
                     if consolidated:
                         # Practical mode: show consolidated meals + shopping list
-                        from llmn.export.meal_consolidator import format_consolidated_result
                         from llmn.export.shopping_list import format_shopping_list
 
-                        console.print(Panel(
-                            f"[bold green]Practical Meal Plan (Consolidated)[/bold green]\n"
-                            f"Profile: {profile_name or 'default'}\n"
-                            f"Meals: {len(consolidated.meals)} (max 5 foods each)",
-                            title="Result"
-                        ))
+                        console.print(
+                            Panel(
+                                f"[bold green]Practical Meal Plan (Consolidated)[/bold green]\n"
+                                f"Profile: {profile_name or 'default'}\n"
+                                f"Meals: {len(consolidated.meals)} (max 5 foods each)",
+                                title="Result",
+                            )
+                        )
 
                         for meal in consolidated.meals:
-                            table = Table(title=f"{meal.meal_name.title()} ({meal.total_calories:.0f} kcal)")
+                            table = Table(
+                                title=f"{meal.meal_name.title()} ({meal.total_calories:.0f} kcal)"
+                            )
                             table.add_column("Food", style="cyan")
                             table.add_column("Amount", justify="right")
 
@@ -1106,34 +1243,46 @@ def optimize(
                                 f"F: {meal.total_fat:.0f}g[/dim]\n"
                             )
 
-                        console.print(Panel(
-                            f"Calories: {consolidated.daily_totals['calories']:.0f}\n"
-                            f"Protein: {consolidated.daily_totals['protein']:.0f}g\n"
-                            f"Carbs: {consolidated.daily_totals['carbs']:.0f}g\n"
-                            f"Fat: {consolidated.daily_totals['fat']:.0f}g",
-                            title="Daily Totals"
-                        ))
+                        console.print(
+                            Panel(
+                                f"Calories: {consolidated.daily_totals['calories']:.0f}\n"
+                                f"Protein: {consolidated.daily_totals['protein']:.0f}g\n"
+                                f"Carbs: {consolidated.daily_totals['carbs']:.0f}g\n"
+                                f"Fat: {consolidated.daily_totals['fat']:.0f}g",
+                                title="Daily Totals",
+                            )
+                        )
 
                         # Shopping list
                         console.print("\n")
                         console.print(format_shopping_list(shopping))
                     else:
                         # Standard output
-                        console.print(Panel(
-                            f"[bold green]Multi-Period Optimization Successful[/bold green]\n"
-                            f"Profile: {profile_name or 'default'}\n"
-                            f"Meals: {len(mp_result.meals)}",
-                            title="Result"
-                        ))
+                        console.print(
+                            Panel(
+                                f"[bold green]Multi-Period Optimization Successful[/bold green]\n"
+                                f"Profile: {profile_name or 'default'}\n"
+                                f"Meals: {len(mp_result.meals)}",
+                                title="Result",
+                            )
+                        )
 
                         for meal in mp_result.meals:
-                            table = Table(title=f"{meal.meal_type.value.title()} ({meal.total_calories:.0f} kcal)")
+                            table = Table(
+                                title=(
+                                    f"{meal.meal_type.value.title()} "
+                                    f"({meal.total_calories:.0f} kcal)"
+                                )
+                            )
                             table.add_column("Food", style="cyan")
                             table.add_column("Grams", justify="right")
 
                             for food in meal.foods:
                                 from llmn.export.llm_prompt import clean_food_name
-                                table.add_row(clean_food_name(food.description), f"{food.grams:.0f}g")
+
+                                table.add_row(
+                                    clean_food_name(food.description), f"{food.grams:.0f}g"
+                                )
 
                             console.print(table)
                             console.print(
@@ -1142,13 +1291,15 @@ def optimize(
                                 f"F: {meal.total_fat:.0f}g[/dim]\n"
                             )
 
-                        console.print(Panel(
-                            f"Calories: {mp_result.daily_totals['calories']:.0f}\n"
-                            f"Protein: {mp_result.daily_totals['protein']:.0f}g\n"
-                            f"Carbs: {mp_result.daily_totals['carbs']:.0f}g\n"
-                            f"Fat: {mp_result.daily_totals['fat']:.0f}g",
-                            title="Daily Totals"
-                        ))
+                        console.print(
+                            Panel(
+                                f"Calories: {mp_result.daily_totals['calories']:.0f}\n"
+                                f"Protein: {mp_result.daily_totals['protein']:.0f}g\n"
+                                f"Carbs: {mp_result.daily_totals['carbs']:.0f}g\n"
+                                f"Fat: {mp_result.daily_totals['fat']:.0f}g",
+                                title="Daily Totals",
+                            )
+                        )
                 else:
                     console.print(f"[red]Optimization failed: {mp_result.message}[/red]")
                     if mp_result.infeasibility_diagnosis:
@@ -1185,20 +1336,22 @@ def optimize(
             # Warn if include_tags filter resulted in no foods
             if request.include_tags and total_foods == 0:
                 tags_str = ", ".join(request.include_tags)
-                console.print(
-                    f"[yellow]Warning: No foods found with tags: {tags_str}[/yellow]"
-                )
+                console.print(f"[yellow]Warning: No foods found with tags: {tags_str}[/yellow]")
                 console.print(
                     "[yellow]Use 'llmn tags add <fdc_id> <tag>' to tag foods first.[/yellow]"
                 )
 
             # Display data quality warnings
             if data_quality_warnings:
-                console.print(f"[yellow]Data quality warnings ({len(data_quality_warnings)} foods):[/yellow]")
+                console.print(
+                    f"[yellow]Data quality warnings ({len(data_quality_warnings)} foods):[/yellow]"
+                )
                 for warning in data_quality_warnings[:5]:  # Limit to 5 for console
                     console.print(f"[yellow]  - {warning}[/yellow]")
                 if len(data_quality_warnings) > 5:
-                    console.print(f"[yellow]  ... and {len(data_quality_warnings) - 5} more[/yellow]")
+                    console.print(
+                        f"[yellow]  ... and {len(data_quality_warnings) - 5} more[/yellow]"
+                    )
 
         # Run optimization - use sparse solver if max_foods_in_solution is set
         if max_foods_in_solution is not None:
@@ -1207,8 +1360,12 @@ def optimize(
             if json_output:
                 result = solve_sparse_diet(request, conn, max_foods_in_solution, verbose=verbose)
             else:
-                with console.status(f"[bold green]Optimizing (max {max_foods_in_solution} foods)..."):
-                    result = solve_sparse_diet(request, conn, max_foods_in_solution, verbose=verbose)
+                with console.status(
+                    f"[bold green]Optimizing (max {max_foods_in_solution} foods)..."
+                ):
+                    result = solve_sparse_diet(
+                        request, conn, max_foods_in_solution, verbose=verbose
+                    )
         else:
             if json_output:
                 result = solve_diet_problem(request, conn, verbose=verbose)
@@ -1222,7 +1379,7 @@ def optimize(
             diagnosis = diagnose_infeasibility(conn, request)
 
     # Save to history if requested
-    run_id: Optional[int] = None
+    run_id: int | None = None
     if save:
         from llmn.export.formatters import JSONFormatter
 
@@ -1292,9 +1449,7 @@ def optimize(
 
             # Add binding constraints info
             if result.kkt_analysis:
-                binding = [
-                    c for c in result.kkt_analysis.nutrient_constraints if c.is_binding
-                ]
+                binding = [c for c in result.kkt_analysis.nutrient_constraints if c.is_binding]
                 response_data["binding_constraints"] = [
                     {
                         "type": c.constraint_type,
@@ -1306,7 +1461,8 @@ def optimize(
                 ]
 
                 foods_at_limit = [
-                    c for c in result.kkt_analysis.binding_food_bounds
+                    c
+                    for c in result.kkt_analysis.binding_food_bounds
                     if c.constraint_type == "food_upper"
                 ]
                 response_data["foods_at_limit"] = [
@@ -1352,19 +1508,24 @@ def optimize(
                 response_data["diagnosis"] = diagnosis
                 for conflict in diagnosis.get("likely_conflicts", []):
                     suggestions.extend(
-                        [s.get("detail", s.get("action", "")) for s in conflict.get("suggestions", [])]
+                        [
+                            s.get("detail", s.get("action", ""))
+                            for s in conflict.get("suggestions", [])
+                        ]
                     )
                 for s in diagnosis.get("suggestions", []):
                     suggestions.append(s.get("detail", s.get("action", "")))
 
-        output_json({
-            "success": result.success,
-            "command": "optimize",
-            "data": response_data,
-            "warnings": warnings,
-            "suggestions": suggestions,
-            "human_summary": human_summary,
-        })
+        output_json(
+            {
+                "success": result.success,
+                "command": "optimize",
+                "data": response_data,
+                "warnings": warnings,
+                "suggestions": suggestions,
+                "human_summary": human_summary,
+            }
+        )
         return
 
     # Format output (non-JSON)
@@ -1443,12 +1604,14 @@ def optimize_batch_cmd(
 
     if not pools_file.exists():
         if json_output:
-            output_json({
-                "success": False,
-                "command": "optimize-batch",
-                "errors": [f"Pools file not found: {pools_file}"],
-                "suggestions": ["Check the file path"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "optimize-batch",
+                    "errors": [f"Pools file not found: {pools_file}"],
+                    "suggestions": ["Check the file path"],
+                }
+            )
         else:
             console.print(f"[red]Pools file not found: {pools_file}[/red]")
         raise typer.Exit(1)
@@ -1458,12 +1621,14 @@ def optimize_batch_cmd(
             data = json_module.load(f)
     except json_module.JSONDecodeError as e:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "optimize-batch",
-                "errors": [f"Invalid JSON in pools file: {e}"],
-                "suggestions": ["Validate the JSON format"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "optimize-batch",
+                    "errors": [f"Invalid JSON in pools file: {e}"],
+                    "suggestions": ["Validate the JSON format"],
+                }
+            )
         else:
             console.print(f"[red]Invalid JSON in pools file: {e}[/red]")
         raise typer.Exit(1)
@@ -1472,24 +1637,28 @@ def optimize_batch_cmd(
         batch_request = parse_batch_request_json(data)
     except Exception as e:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "optimize-batch",
-                "errors": [f"Failed to parse batch request: {e}"],
-                "suggestions": ["Check the JSON format matches the expected schema"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "optimize-batch",
+                    "errors": [f"Failed to parse batch request: {e}"],
+                    "suggestions": ["Check the JSON format matches the expected schema"],
+                }
+            )
         else:
             console.print(f"[red]Failed to parse batch request: {e}[/red]")
         raise typer.Exit(1)
 
     if not batch_request.pools:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "optimize-batch",
-                "errors": ["No pools specified in batch request"],
-                "suggestions": ["Add at least one pool with food IDs"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "optimize-batch",
+                    "errors": ["No pools specified in batch request"],
+                    "suggestions": ["Add at least one pool with food IDs"],
+                }
+            )
         else:
             console.print("[red]No pools specified in batch request[/red]")
         raise typer.Exit(1)
@@ -1497,7 +1666,9 @@ def optimize_batch_cmd(
     db = get_db()
     with db.get_connection() as conn:
         if not json_output:
-            console.print(f"[dim]Running batch optimization across {len(batch_request.pools)} pools...[/dim]")
+            console.print(
+                f"[dim]Running batch optimization across {len(batch_request.pools)} pools...[/dim]"
+            )
 
         results = run_batch_optimization(conn, batch_request, save_runs=False)
         comparison = compare_batch_results(results)
@@ -1506,14 +1677,19 @@ def optimize_batch_cmd(
         response_data = format_batch_response(results, comparison)
         successful = sum(1 for r in results if r.success)
 
-        output_json({
-            "success": successful > 0,
-            "command": "optimize-batch",
-            "data": response_data,
-            "warnings": [],
-            "suggestions": [],
-            "human_summary": f"{successful}/{len(results)} pools feasible. Best: {comparison.get('best', 'none')}",
-        })
+        output_json(
+            {
+                "success": successful > 0,
+                "command": "optimize-batch",
+                "data": response_data,
+                "warnings": [],
+                "suggestions": [],
+                "human_summary": (
+                    f"{successful}/{len(results)} pools feasible. "
+                    f"Best: {comparison.get('best', 'none')}"
+                ),
+            }
+        )
     else:
         # Table output
         table = Table(title="Batch Optimization Results")
@@ -1529,8 +1705,10 @@ def optimize_batch_cmd(
                 status = "[green]optimal[/green]"
                 calories = f"{r.summary.get('total_calories', 0):.0f}"
                 protein = f"{r.summary.get('total_protein', 0):.1f}g"
-                cost = f"${r.summary.get('total_cost', 0):.2f}" if r.summary.get('total_cost') else "-"
-                foods = str(r.summary.get('food_count', 0))
+                cost = (
+                    f"${r.summary.get('total_cost', 0):.2f}" if r.summary.get("total_cost") else "-"
+                )
+                foods = str(r.summary.get("food_count", 0))
             else:
                 status = f"[red]{r.status}[/red]"
                 calories = protein = cost = foods = "-"
@@ -1546,9 +1724,7 @@ def optimize_batch_cmd(
 @app.command("export-for-llm")
 def export_for_llm(
     run_id: str = typer.Argument(..., help="Run ID or 'latest'"),
-    output: Optional[Path] = typer.Option(
-        None, "--output", "-o", help="Output file path"
-    ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Output file path"),
     days: int = typer.Option(1, "--days", "-d", help="Number of days for meal plan"),
 ) -> None:
     """Export optimization result as LLM-ready prompt."""
@@ -1662,23 +1838,25 @@ def history(
         runs = OptimizationRunQueries.list_runs(conn, limit)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "history",
-            "data": {
-                "runs": [
-                    {
-                        "run_id": run["run_id"],
-                        "date": str(run["run_date"]),
-                        "profile": run["profile_name"],
-                        "status": run["status"],
-                        "total_cost": run["total_cost"],
-                    }
-                    for run in runs
-                ],
-            },
-            "human_summary": f"{len(runs)} optimization runs",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "history",
+                "data": {
+                    "runs": [
+                        {
+                            "run_id": run["run_id"],
+                            "date": str(run["run_date"]),
+                            "profile": run["profile_name"],
+                            "status": run["status"],
+                            "total_cost": run["total_cost"],
+                        }
+                        for run in runs
+                    ],
+                },
+                "human_summary": f"{len(runs)} optimization runs",
+            }
+        )
         return
 
     if not runs:
@@ -1715,6 +1893,7 @@ def history(
 def schema_constraints() -> None:
     """Show constraint schema for LLM agents."""
     from llmn.agent.schema import get_constraint_schema
+
     output_json(get_constraint_schema())
 
 
@@ -1722,6 +1901,7 @@ def schema_constraints() -> None:
 def schema_nutrients() -> None:
     """List all available nutrients with metadata."""
     from llmn.agent.schema import get_nutrient_list
+
     output_json(get_nutrient_list())
 
 
@@ -1729,6 +1909,7 @@ def schema_nutrients() -> None:
 def schema_tags() -> None:
     """List all tags in the database."""
     from llmn.agent.schema import get_tag_list
+
     db = get_db()
     with db.get_connection() as conn:
         output_json(get_tag_list(conn))
@@ -1738,6 +1919,7 @@ def schema_tags() -> None:
 def schema_foods() -> None:
     """Show food filter schema."""
     from llmn.agent.schema import get_food_filter_schema
+
     output_json(get_food_filter_schema())
 
 
@@ -1745,6 +1927,7 @@ def schema_foods() -> None:
 def schema_all() -> None:
     """Export complete schema documentation."""
     from llmn.agent.schema import get_full_schema
+
     db = get_db()
     with db.get_connection() as conn:
         output_json(get_full_schema(conn))
@@ -1757,17 +1940,21 @@ def schema_all() -> None:
 
 @explore_app.command("foods")
 def explore_foods_cmd(
-    query: Optional[str] = typer.Argument(None, help="Text search query"),
-    min_protein: Optional[float] = typer.Option(None, "--min-protein", help="Min protein per 100g"),
-    max_protein: Optional[float] = typer.Option(None, "--max-protein", help="Max protein per 100g"),
-    min_calories: Optional[float] = typer.Option(None, "--min-calories", help="Min calories per 100g"),
-    max_calories: Optional[float] = typer.Option(None, "--max-calories", help="Max calories per 100g"),
-    min_cost: Optional[float] = typer.Option(None, "--min-cost", help="Min cost per 100g"),
-    max_cost: Optional[float] = typer.Option(None, "--max-cost", help="Max cost per 100g"),
-    has_tag: Optional[str] = typer.Option(None, "--tag", help="Filter to foods with this tag"),
-    has_price: Optional[bool] = typer.Option(None, "--has-price/--no-price", help="Filter by price availability"),
-    category: Optional[str] = typer.Option(
-        None, "--category", help="Filter by food category (protein, fat, carb, legume, vegetable, fruit, mixed)"
+    query: str | None = typer.Argument(None, help="Text search query"),
+    min_protein: float | None = typer.Option(None, "--min-protein", help="Min protein per 100g"),
+    max_protein: float | None = typer.Option(None, "--max-protein", help="Max protein per 100g"),
+    min_calories: float | None = typer.Option(None, "--min-calories", help="Min calories per 100g"),
+    max_calories: float | None = typer.Option(None, "--max-calories", help="Max calories per 100g"),
+    min_cost: float | None = typer.Option(None, "--min-cost", help="Min cost per 100g"),
+    max_cost: float | None = typer.Option(None, "--max-cost", help="Max cost per 100g"),
+    has_tag: str | None = typer.Option(None, "--tag", help="Filter to foods with this tag"),
+    has_price: bool | None = typer.Option(
+        None, "--has-price/--no-price", help="Filter by price availability"
+    ),
+    category: str | None = typer.Option(
+        None,
+        "--category",
+        help="Filter by food category (protein, fat, carb, legume, vegetable, fruit, mixed)",
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Maximum results"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -1794,26 +1981,28 @@ def explore_foods_cmd(
         results = explore_foods(conn, filters)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "explore foods",
-            "data": {
-                "filters": {
-                    "query": query,
-                    "min_protein": min_protein,
-                    "max_protein": max_protein,
-                    "min_calories": min_calories,
-                    "max_calories": max_calories,
-                    "min_cost": min_cost,
-                    "max_cost": max_cost,
-                    "has_tag": has_tag,
-                    "has_price": has_price,
+        output_json(
+            {
+                "success": True,
+                "command": "explore foods",
+                "data": {
+                    "filters": {
+                        "query": query,
+                        "min_protein": min_protein,
+                        "max_protein": max_protein,
+                        "min_calories": min_calories,
+                        "max_calories": max_calories,
+                        "min_cost": min_cost,
+                        "max_cost": max_cost,
+                        "has_tag": has_tag,
+                        "has_price": has_price,
+                    },
+                    "results": results,
+                    "total_matches": len(results),
                 },
-                "results": results,
-                "total_matches": len(results),
-            },
-            "human_summary": f"Found {len(results)} foods matching filters",
-        })
+                "human_summary": f"Found {len(results)} foods matching filters",
+            }
+        )
         return
 
     if not results:
@@ -1850,26 +2039,30 @@ def explore_foods_cmd(
 @explore_app.command("high-nutrient")
 def explore_high_nutrient(
     nutrient: str = typer.Argument(..., help="Nutrient name (e.g., protein, iron, vitamin_d)"),
-    min_amount: Optional[float] = typer.Option(None, "--min", help="Minimum amount per 100g"),
-    max_amount: Optional[float] = typer.Option(None, "--max", help="Maximum amount per 100g"),
-    has_tag: Optional[str] = typer.Option(None, "--tag", help="Filter to foods with this tag"),
+    min_amount: float | None = typer.Option(None, "--min", help="Minimum amount per 100g"),
+    max_amount: float | None = typer.Option(None, "--max", help="Maximum amount per 100g"),
+    has_tag: str | None = typer.Option(None, "--tag", help="Filter to foods with this tag"),
     limit: int = typer.Option(20, "--limit", "-n", help="Maximum results"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Find foods high in a specific nutrient."""
-    from llmn.explore.foods import find_high_nutrient_foods
     from llmn.data.nutrient_ids import NUTRIENT_IDS, NUTRIENT_UNITS
+    from llmn.explore.foods import find_high_nutrient_foods
 
     # Validate nutrient name
     nutrient_lower = nutrient.lower().replace(" ", "_").replace("-", "_")
     if nutrient_lower not in NUTRIENT_IDS:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "explore high-nutrient",
-                "errors": [f"Unknown nutrient: {nutrient}"],
-                "suggestions": [f"Available nutrients: {', '.join(sorted(NUTRIENT_IDS.keys())[:10])}..."],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "explore high-nutrient",
+                    "errors": [f"Unknown nutrient: {nutrient}"],
+                    "suggestions": [
+                        f"Available nutrients: {', '.join(sorted(NUTRIENT_IDS.keys())[:10])}..."
+                    ],
+                }
+            )
         else:
             console.print(f"[red]Unknown nutrient: {nutrient}[/red]")
             console.print(f"[dim]Available: {', '.join(sorted(NUTRIENT_IDS.keys())[:10])}...[/dim]")
@@ -1877,24 +2070,24 @@ def explore_high_nutrient(
 
     db = get_db()
     with db.get_connection() as conn:
-        results = find_high_nutrient_foods(
-            conn, nutrient, min_amount, max_amount, has_tag, limit
-        )
+        results = find_high_nutrient_foods(conn, nutrient, min_amount, max_amount, has_tag, limit)
 
     unit = NUTRIENT_UNITS.get(NUTRIENT_IDS[nutrient_lower], "")
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "explore high-nutrient",
-            "data": {
-                "nutrient": nutrient,
-                "unit": unit,
-                "filters": {"min": min_amount, "max": max_amount, "tag": has_tag},
-                "results": results,
-            },
-            "human_summary": f"Found {len(results)} foods ranked by {nutrient} content",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "explore high-nutrient",
+                "data": {
+                    "nutrient": nutrient,
+                    "unit": unit,
+                    "filters": {"min": min_amount, "max": max_amount, "tag": has_tag},
+                    "results": results,
+                },
+                "human_summary": f"Found {len(results)} foods ranked by {nutrient} content",
+            }
+        )
         return
 
     if not results:
@@ -1926,7 +2119,7 @@ def explore_high_nutrient(
 @explore_app.command("compare")
 def explore_compare(
     fdc_ids: list[int] = typer.Argument(..., help="FDC IDs to compare"),
-    nutrients: Optional[str] = typer.Option(
+    nutrients: str | None = typer.Option(
         None, "--nutrients", help="Comma-separated nutrient names to compare"
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -1943,12 +2136,17 @@ def explore_compare(
         result = compare_foods(conn, fdc_ids, nutrient_list)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "explore compare",
-            "data": result,
-            "human_summary": f"Comparing {len(result['foods'])} foods across {len(result['comparison'])} nutrients",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "explore compare",
+                "data": result,
+                "human_summary": (
+                    f"Comparing {len(result['foods'])} foods across "
+                    f"{len(result['comparison'])} nutrients"
+                ),
+            }
+        )
         return
 
     if not result["foods"]:
@@ -1963,7 +2161,7 @@ def explore_compare(
 
     for row in result["comparison"]:
         values = [
-            f"{row['values'].get(f['fdc_id'], '-'):.1f}" if row['values'].get(f['fdc_id']) else "-"
+            f"{row['values'].get(f['fdc_id'], '-'):.1f}" if row["values"].get(f["fdc_id"]) else "-"
             for f in result["foods"]
         ]
         table.add_row(f"{row['name']} ({row.get('unit', '')})", *values)
@@ -1974,11 +2172,15 @@ def explore_compare(
 @explore_app.command("whatif")
 def explore_whatif(
     base_run: str = typer.Option("latest", "--base", help="Base run ID or 'latest'"),
-    add: Optional[list[str]] = typer.Option(None, "--add", help="Add constraint (e.g., 'protein:min:180')"),
-    remove: Optional[list[str]] = typer.Option(None, "--remove", help="Remove nutrient constraint"),
-    calories_min: Optional[float] = typer.Option(None, "--cal-min", help="New calorie minimum"),
-    calories_max: Optional[float] = typer.Option(None, "--cal-max", help="New calorie maximum"),
-    exclude_food: Optional[list[int]] = typer.Option(None, "--exclude-food", help="Exclude food by FDC ID"),
+    add: list[str] | None = typer.Option(
+        None, "--add", help="Add constraint (e.g., 'protein:min:180')"
+    ),
+    remove: list[str] | None = typer.Option(None, "--remove", help="Remove nutrient constraint"),
+    calories_min: float | None = typer.Option(None, "--cal-min", help="New calorie minimum"),
+    calories_max: float | None = typer.Option(None, "--cal-max", help="New calorie maximum"),
+    exclude_food: list[int] | None = typer.Option(
+        None, "--exclude-food", help="Exclude food by FDC ID"
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Include KKT analysis"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -2008,15 +2210,18 @@ def explore_whatif(
         )
 
     if json_output:
-        output_json({
-            "success": result["success"],
-            "command": "explore whatif",
-            "data": result,
-            "human_summary": (
-                f"What-if analysis: {result['result']['status']}"
-                if result["success"] else result.get("error", "Analysis failed")
-            ),
-        })
+        output_json(
+            {
+                "success": result["success"],
+                "command": "explore whatif",
+                "data": result,
+                "human_summary": (
+                    f"What-if analysis: {result['result']['status']}"
+                    if result["success"]
+                    else result.get("error", "Analysis failed")
+                ),
+            }
+        )
         return
 
     if not result["success"]:
@@ -2076,12 +2281,14 @@ def explore_whatif(
 
 @explore_app.command("suggest-pools")
 def explore_suggest_pools(
-    strategies: Optional[str] = typer.Option(
+    strategies: str | None = typer.Option(
         None, "--strategies", "-s", help="Comma-separated strategies: balanced,high_protein,budget"
     ),
     target_size: int = typer.Option(30, "--size", help="Target number of foods per pool"),
-    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Filter to foods with this tag"),
-    require_price: bool = typer.Option(False, "--require-price", help="Only include foods with prices"),
+    tag: str | None = typer.Option(None, "--tag", "-t", help="Filter to foods with this tag"),
+    require_price: bool = typer.Option(
+        False, "--require-price", help="Only include foods with prices"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Suggest food pools for optimization using different strategies.
@@ -2115,12 +2322,14 @@ def explore_suggest_pools(
 
     if json_output:
         response = format_pool_suggestions(suggestions)
-        output_json({
-            "success": True,
-            "command": "explore suggest-pools",
-            "data": response,
-            "human_summary": f"Generated {len(suggestions)} pool suggestions",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "explore suggest-pools",
+                "data": response,
+                "human_summary": f"Generated {len(suggestions)} pool suggestions",
+            }
+        )
         return
 
     if not suggestions:
@@ -2128,13 +2337,15 @@ def explore_suggest_pools(
         return
 
     for suggestion in suggestions:
-        console.print(Panel(
-            f"[bold]{suggestion.name}[/bold]\n\n"
-            f"Strategy: {suggestion.strategy}\n"
-            f"Foods: {len(suggestion.food_ids)}\n"
-            f"{suggestion.description}",
-            title=f"Pool: {suggestion.name}",
-        ))
+        console.print(
+            Panel(
+                f"[bold]{suggestion.name}[/bold]\n\n"
+                f"Strategy: {suggestion.strategy}\n"
+                f"Foods: {len(suggestion.food_ids)}\n"
+                f"{suggestion.description}",
+                title=f"Pool: {suggestion.name}",
+            )
+        )
 
         # Show food IDs in a format easy to copy for --foods flag
         if suggestion.food_ids:
@@ -2148,7 +2359,9 @@ def explore_suggest_pools(
 @explore_app.command("runs")
 def explore_runs(
     limit: int = typer.Option(10, "--limit", "-n", help="Maximum runs to show"),
-    profile_filter: Optional[str] = typer.Option(None, "--profile", "-p", help="Filter by profile name"),
+    profile_filter: str | None = typer.Option(
+        None, "--profile", "-p", help="Filter by profile name"
+    ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List recent optimization runs.
@@ -2166,12 +2379,14 @@ def explore_runs(
 
     if json_output:
         response = format_run_list(runs)
-        output_json({
-            "success": True,
-            "command": "explore runs",
-            "data": response,
-            "human_summary": f"Listed {len(runs)} optimization runs",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "explore runs",
+                "data": response,
+                "human_summary": f"Listed {len(runs)} optimization runs",
+            }
+        )
         return
 
     if not runs:
@@ -2228,23 +2443,27 @@ def explore_compare_runs(
 
     if comparison is None:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "explore compare-runs",
-                "errors": [f"Could not find run {run_a} or {run_b}"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "explore compare-runs",
+                    "errors": [f"Could not find run {run_a} or {run_b}"],
+                }
+            )
         else:
             console.print(f"[red]Could not find run {run_a} or {run_b}[/red]")
         raise typer.Exit(1)
 
     if json_output:
         response = format_run_comparison(comparison)
-        output_json({
-            "success": True,
-            "command": "explore compare-runs",
-            "data": response,
-            "human_summary": f"Compared run {run_a} vs {run_b}",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "explore compare-runs",
+                "data": response,
+                "human_summary": f"Compared run {run_a} vs {run_b}",
+            }
+        )
         return
 
     # Display comparison
@@ -2331,8 +2550,8 @@ def explore_compare_runs(
 def prices_add(
     fdc_id: int = typer.Argument(..., help="FDC ID of food"),
     price_per_100g: float = typer.Argument(..., help="Price per 100 grams"),
-    source: Optional[str] = typer.Option(None, "--source", "-s", help="Price source"),
-    notes: Optional[str] = typer.Option(None, "--notes", "-n", help="Notes"),
+    source: str | None = typer.Option(None, "--source", "-s", help="Price source"),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Notes"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Add or update price for a food."""
@@ -2342,11 +2561,13 @@ def prices_add(
         food = FoodQueries.get_food_by_id(conn, fdc_id)
         if not food:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "prices add",
-                    "errors": [f"Food with FDC ID {fdc_id} not found"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "prices add",
+                        "errors": [f"Food with FDC ID {fdc_id} not found"],
+                    }
+                )
             else:
                 console.print(f"[red]Food with FDC ID {fdc_id} not found[/red]")
             raise typer.Exit(1)
@@ -2354,21 +2575,24 @@ def prices_add(
         PriceQueries.upsert_price(conn, fdc_id, price_per_100g, source, notes)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "prices add",
-            "data": {
-                "fdc_id": fdc_id,
-                "description": food["description"],
-                "price_per_100g": price_per_100g,
-                "source": source,
-            },
-            "human_summary": f"Price set: ${price_per_100g:.2f}/100g for {food['description'][:40]}",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "prices add",
+                "data": {
+                    "fdc_id": fdc_id,
+                    "description": food["description"],
+                    "price_per_100g": price_per_100g,
+                    "source": source,
+                },
+                "human_summary": (
+                    f"Price set: ${price_per_100g:.2f}/100g for {food['description'][:40]}"
+                ),
+            }
+        )
     else:
         console.print(
-            f"[green]Price set for '{food['description'][:50]}': "
-            f"${price_per_100g:.2f}/100g[/green]"
+            f"[green]Price set for '{food['description'][:50]}': ${price_per_100g:.2f}/100g[/green]"
         )
 
 
@@ -2391,21 +2615,17 @@ def prices_import(
     console.print(f"[green]Imported {counts['loaded']} prices[/green]")
     if counts["skipped_invalid_id"]:
         console.print(
-            f"[yellow]Skipped {counts['skipped_invalid_id']} "
-            f"rows with invalid FDC IDs[/yellow]"
+            f"[yellow]Skipped {counts['skipped_invalid_id']} rows with invalid FDC IDs[/yellow]"
         )
     if counts["skipped_missing_price"]:
         console.print(
-            f"[yellow]Skipped {counts['skipped_missing_price']} "
-            f"rows with missing prices[/yellow]"
+            f"[yellow]Skipped {counts['skipped_missing_price']} rows with missing prices[/yellow]"
         )
 
 
 @prices_app.command("list")
 def prices_list(
-    missing: bool = typer.Option(
-        False, "--missing", "-m", help="Show foods without prices"
-    ),
+    missing: bool = typer.Option(False, "--missing", "-m", help="Show foods without prices"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum results"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
@@ -2428,12 +2648,14 @@ def prices_list(
                 item["source"] = row["price_source"]
             data.append(item)
 
-        output_json({
-            "success": True,
-            "command": "prices list",
-            "data": {"foods": data, "showing_missing": missing},
-            "human_summary": f"{len(results)} foods {'without' if missing else 'with'} prices",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "prices list",
+                "data": {"foods": data, "showing_missing": missing},
+                "human_summary": f"{len(results)} foods {'without' if missing else 'with'} prices",
+            }
+        )
         return
 
     if not results:
@@ -2482,11 +2704,13 @@ def tags_add(
         food = FoodQueries.get_food_by_id(conn, fdc_id)
         if not food:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "tags add",
-                    "errors": [f"Food with FDC ID {fdc_id} not found"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "tags add",
+                        "errors": [f"Food with FDC ID {fdc_id} not found"],
+                    }
+                )
             else:
                 console.print(f"[red]Food with FDC ID {fdc_id} not found[/red]")
             raise typer.Exit(1)
@@ -2494,12 +2718,14 @@ def tags_add(
         TagQueries.add_tag(conn, fdc_id, tag)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "tags add",
-            "data": {"fdc_id": fdc_id, "tag": tag, "description": food["description"]},
-            "human_summary": f"Added tag '{tag}' to {food['description'][:40]}",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "tags add",
+                "data": {"fdc_id": fdc_id, "tag": tag, "description": food["description"]},
+                "human_summary": f"Added tag '{tag}' to {food['description'][:40]}",
+            }
+        )
     else:
         console.print(f"[green]Added tag '{tag}' to '{food['description'][:50]}'[/green]")
 
@@ -2516,12 +2742,14 @@ def tags_remove(
         removed = TagQueries.remove_tag(conn, fdc_id, tag)
 
     if json_output:
-        output_json({
-            "success": removed,
-            "command": "tags remove",
-            "data": {"fdc_id": fdc_id, "tag": tag, "removed": removed},
-            "human_summary": f"Removed tag '{tag}'" if removed else f"Tag '{tag}' not found",
-        })
+        output_json(
+            {
+                "success": removed,
+                "command": "tags remove",
+                "data": {"fdc_id": fdc_id, "tag": tag, "removed": removed},
+                "human_summary": f"Removed tag '{tag}'" if removed else f"Tag '{tag}' not found",
+            }
+        )
     elif removed:
         console.print(f"[green]Removed tag '{tag}' from food {fdc_id}[/green]")
     else:
@@ -2530,10 +2758,8 @@ def tags_remove(
 
 @tags_app.command("list")
 def tags_list(
-    tag: Optional[str] = typer.Option(None, "--tag", "-t", help="Filter by tag"),
-    fdc_id: Optional[int] = typer.Option(
-        None, "--food", "-f", help="Show tags for food"
-    ),
+    tag: str | None = typer.Option(None, "--tag", "-t", help="Filter by tag"),
+    fdc_id: int | None = typer.Option(None, "--food", "-f", help="Show tags for food"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List tags or foods with a specific tag."""
@@ -2544,11 +2770,13 @@ def tags_list(
             food = FoodQueries.get_food_by_id(conn, fdc_id)
             if not food:
                 if json_output:
-                    output_json({
-                        "success": False,
-                        "command": "tags list",
-                        "errors": [f"Food with FDC ID {fdc_id} not found"],
-                    })
+                    output_json(
+                        {
+                            "success": False,
+                            "command": "tags list",
+                            "errors": [f"Food with FDC ID {fdc_id} not found"],
+                        }
+                    )
                 else:
                     console.print(f"[red]Food with FDC ID {fdc_id} not found[/red]")
                 raise typer.Exit(1)
@@ -2556,12 +2784,18 @@ def tags_list(
             tags = TagQueries.get_tags_for_food(conn, fdc_id)
 
             if json_output:
-                output_json({
-                    "success": True,
-                    "command": "tags list",
-                    "data": {"fdc_id": fdc_id, "description": food["description"], "tags": tags},
-                    "human_summary": f"{len(tags)} tags for {food['description'][:40]}",
-                })
+                output_json(
+                    {
+                        "success": True,
+                        "command": "tags list",
+                        "data": {
+                            "fdc_id": fdc_id,
+                            "description": food["description"],
+                            "tags": tags,
+                        },
+                        "human_summary": f"{len(tags)} tags for {food['description'][:40]}",
+                    }
+                )
             elif tags:
                 console.print(f"Tags for '{food['description'][:50]}':")
                 for t in tags:
@@ -2574,15 +2808,20 @@ def tags_list(
             foods = TagQueries.get_foods_with_tag(conn, tag)
 
             if json_output:
-                output_json({
-                    "success": True,
-                    "command": "tags list",
-                    "data": {
-                        "tag": tag,
-                        "foods": [{"fdc_id": f["fdc_id"], "description": f["description"]} for f in foods],
-                    },
-                    "human_summary": f"{len(foods)} foods with tag '{tag}'",
-                })
+                output_json(
+                    {
+                        "success": True,
+                        "command": "tags list",
+                        "data": {
+                            "tag": tag,
+                            "foods": [
+                                {"fdc_id": f["fdc_id"], "description": f["description"]}
+                                for f in foods
+                            ],
+                        },
+                        "human_summary": f"{len(foods)} foods with tag '{tag}'",
+                    }
+                )
                 return
 
             if not foods:
@@ -2603,12 +2842,14 @@ def tags_list(
             all_tags = TagQueries.get_all_tags(conn)
 
             if json_output:
-                output_json({
-                    "success": True,
-                    "command": "tags list",
-                    "data": {"tags": [{"tag": t, "count": c} for t, c in all_tags]},
-                    "human_summary": f"{len(all_tags)} unique tags",
-                })
+                output_json(
+                    {
+                        "success": True,
+                        "command": "tags list",
+                        "data": {"tags": [{"tag": t, "count": c} for t, c in all_tags]},
+                        "human_summary": f"{len(all_tags)} unique tags",
+                    }
+                )
                 return
 
             if not all_tags:
@@ -2627,9 +2868,7 @@ def tags_list(
 
 @tags_app.command("interactive")
 def tags_interactive(
-    tag: str = typer.Option(
-        "staple", "--tag", "-t", help="Tag to apply (default: staple)"
-    ),
+    tag: str = typer.Option("staple", "--tag", "-t", help="Tag to apply (default: staple)"),
 ) -> None:
     """Interactive mode to search and tag foods."""
     tag = tag.lower()
@@ -2689,9 +2928,7 @@ def tags_interactive(
         console.print(table)
 
         # Selection loop
-        choice = Prompt.ask(
-            "Select # to toggle (e.g. '1 3') or Enter to search again", default=""
-        )
+        choice = Prompt.ask("Select # to toggle (e.g. '1 3') or Enter to search again", default="")
         if not choice.strip():
             continue
 
@@ -2723,9 +2960,7 @@ def tags_interactive(
 def profile_wizard() -> None:
     """Interactive wizard to create a constraint profile."""
     console.print("[bold]Profile Creation Wizard[/bold]")
-    console.print(
-        "Answer a few questions to generate a personalized constraint profile.\n"
-    )
+    console.print("Answer a few questions to generate a personalized constraint profile.\n")
 
     name = Prompt.ask("Profile Name (e.g., 'summer_cut')")
     description = Prompt.ask("Description", default="Custom profile")
@@ -2784,22 +3019,20 @@ def profile_wizard() -> None:
 @profile_app.command("create")
 def profile_create(
     name: str = typer.Argument(..., help="Profile name"),
-    from_file: Path = typer.Option(
-        ..., "--from-file", "-f", help="YAML constraint file"
-    ),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="Profile description"
-    ),
+    from_file: Path = typer.Option(..., "--from-file", "-f", help="YAML constraint file"),
+    description: str | None = typer.Option(None, "--description", "-d", help="Profile description"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Create a constraint profile from YAML file."""
     if not from_file.exists():
         if json_output:
-            output_json({
-                "success": False,
-                "command": "profile create",
-                "errors": [f"File not found: {from_file}"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "profile create",
+                    "errors": [f"File not found: {from_file}"],
+                }
+            )
         else:
             console.print(f"[red]File not found: {from_file}[/red]")
         raise typer.Exit(1)
@@ -2814,11 +3047,13 @@ def profile_create(
         load_profile_from_yaml(from_file)
     except Exception as e:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "profile create",
-                "errors": [f"Invalid profile YAML: {e}"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "profile create",
+                    "errors": [f"Invalid profile YAML: {e}"],
+                }
+            )
         else:
             console.print(f"[red]Invalid profile YAML: {e}[/red]")
         raise typer.Exit(1)
@@ -2835,27 +3070,29 @@ def profile_create(
         existing = ProfileQueries.get_profile_by_name(conn, name)
         if existing:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "profile create",
-                    "errors": [f"Profile '{name}' already exists"],
-                    "suggestions": ["Use a different name or delete the existing profile"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "profile create",
+                        "errors": [f"Profile '{name}' already exists"],
+                        "suggestions": ["Use a different name or delete the existing profile"],
+                    }
+                )
             else:
                 console.print(f"[red]Profile '{name}' already exists[/red]")
             raise typer.Exit(1)
 
-        profile_id = ProfileQueries.create_profile(
-            conn, name, constraints_json, description
-        )
+        profile_id = ProfileQueries.create_profile(conn, name, constraints_json, description)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "profile create",
-            "data": {"profile_id": profile_id, "name": name},
-            "human_summary": f"Created profile '{name}'",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "profile create",
+                "data": {"profile_id": profile_id, "name": name},
+                "human_summary": f"Created profile '{name}'",
+            }
+        )
     else:
         console.print(f"[green]Created profile '{name}' (ID: {profile_id})[/green]")
 
@@ -2870,22 +3107,24 @@ def profile_list(
         profiles = ProfileQueries.list_profiles(conn)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "profile list",
-            "data": {
-                "profiles": [
-                    {
-                        "profile_id": p["profile_id"],
-                        "name": p["name"],
-                        "description": p["description"],
-                        "created_at": str(p["created_at"]),
-                    }
-                    for p in profiles
-                ],
-            },
-            "human_summary": f"{len(profiles)} profiles",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "profile list",
+                "data": {
+                    "profiles": [
+                        {
+                            "profile_id": p["profile_id"],
+                            "name": p["name"],
+                            "description": p["description"],
+                            "created_at": str(p["created_at"]),
+                        }
+                        for p in profiles
+                    ],
+                },
+                "human_summary": f"{len(profiles)} profiles",
+            }
+        )
         return
 
     if not profiles:
@@ -2919,11 +3158,13 @@ def profile_show(
 
     if not profile:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "profile show",
-                "errors": [f"Profile '{name}' not found"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "profile show",
+                    "errors": [f"Profile '{name}' not found"],
+                }
+            )
         else:
             console.print(f"[red]Profile '{name}' not found[/red]")
         raise typer.Exit(1)
@@ -2931,18 +3172,20 @@ def profile_show(
     constraints = json.loads(profile["constraints_json"])
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "profile show",
-            "data": {
-                "profile_id": profile["profile_id"],
-                "name": profile["name"],
-                "description": profile["description"],
-                "created_at": str(profile["created_at"]),
-                "constraints": constraints,
-            },
-            "human_summary": f"Profile '{name}'",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "profile show",
+                "data": {
+                    "profile_id": profile["profile_id"],
+                    "name": profile["name"],
+                    "description": profile["description"],
+                    "created_at": str(profile["created_at"]),
+                    "constraints": constraints,
+                },
+                "human_summary": f"Profile '{name}'",
+            }
+        )
         return
 
     console.print(f"\n[bold]{profile['name']}[/bold]")
@@ -2952,6 +3195,7 @@ def profile_show(
     console.print("\nConstraints:")
 
     import yaml
+
     console.print(yaml.dump(constraints, default_flow_style=False))
 
 
@@ -2967,11 +3211,13 @@ def profile_delete(
         profile = ProfileQueries.get_profile_by_name(conn, name)
         if not profile:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "profile delete",
-                    "errors": [f"Profile '{name}' not found"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "profile delete",
+                        "errors": [f"Profile '{name}' not found"],
+                    }
+                )
             else:
                 console.print(f"[red]Profile '{name}' not found[/red]")
             raise typer.Exit(1)
@@ -2984,12 +3230,14 @@ def profile_delete(
         ProfileQueries.delete_profile(conn, name)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "profile delete",
-            "data": {"name": name},
-            "human_summary": f"Deleted profile '{name}'",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "profile delete",
+                "data": {"name": name},
+                "human_summary": f"Deleted profile '{name}'",
+            }
+        )
     else:
         console.print(f"[green]Deleted profile '{name}'[/green]")
 
@@ -3004,17 +3252,19 @@ def patterns_list(
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List available dietary patterns."""
-    from llmn.data.dietary_patterns import list_patterns, DIETARY_PATTERNS
+    from llmn.data.dietary_patterns import list_patterns
 
     patterns = list_patterns()
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "patterns list",
-            "data": {"patterns": patterns},
-            "human_summary": f"{len(patterns)} dietary patterns available",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "patterns list",
+                "data": {"patterns": patterns},
+                "human_summary": f"{len(patterns)} dietary patterns available",
+            }
+        )
     else:
         from rich.table import Table
 
@@ -3026,7 +3276,7 @@ def patterns_list(
             table.add_row(p["name"], p["description"])
 
         console.print(table)
-        console.print(f"\n[dim]Use with: llmn optimize --pattern <name>[/dim]")
+        console.print("\n[dim]Use with: llmn optimize --pattern <name>[/dim]")
 
 
 @patterns_app.command("info")
@@ -3040,30 +3290,34 @@ def patterns_info(
     pattern = get_pattern(name)
     if not pattern:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "patterns info",
-                "errors": [f"Pattern '{name}' not found"],
-                "suggestions": ["Use 'llmn patterns list' to see available patterns"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "patterns info",
+                    "errors": [f"Pattern '{name}' not found"],
+                    "suggestions": ["Use 'llmn patterns list' to see available patterns"],
+                }
+            )
         else:
             console.print(f"[red]Pattern '{name}' not found[/red]")
         raise typer.Exit(1)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "patterns info",
-            "data": {
-                "name": pattern.name,
-                "description": pattern.description,
-                "include_keywords_count": len(pattern.include_keywords),
-                "exclude_keywords_count": len(pattern.exclude_keywords),
-                "sample_exclude": pattern.exclude_keywords[:10],
-                "has_macro_targets": pattern.macro_targets is not None,
-            },
-            "human_summary": f"Pattern '{name}': {pattern.description}",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "patterns info",
+                "data": {
+                    "name": pattern.name,
+                    "description": pattern.description,
+                    "include_keywords_count": len(pattern.include_keywords),
+                    "exclude_keywords_count": len(pattern.exclude_keywords),
+                    "sample_exclude": pattern.exclude_keywords[:10],
+                    "has_macro_targets": pattern.macro_targets is not None,
+                },
+                "human_summary": f"Pattern '{name}': {pattern.description}",
+            }
+        )
     else:
         console.print(f"[bold]{pattern.name}[/bold]")
         console.print(f"  {pattern.description}")
@@ -3072,7 +3326,7 @@ def patterns_info(
         if pattern.exclude_keywords:
             console.print(f"  Sample excludes: {', '.join(pattern.exclude_keywords[:10])}")
         if pattern.macro_targets:
-            console.print(f"  Has macro targets: Yes")
+            console.print("  Has macro targets: Yes")
 
 
 # ============================================================================
@@ -3091,9 +3345,7 @@ def user_create(
         "--activity",
         help="Activity level (sedentary/lightly_active/moderate/active/very_active)",
     ),
-    goal: Optional[str] = typer.Option(
-        None, "--goal", help="Goal (e.g., 'fat_loss:185:165')"
-    ),
+    goal: str | None = typer.Option(None, "--goal", help="Goal (e.g., 'fat_loss:185:165')"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Create a user profile for weight tracking."""
@@ -3127,23 +3379,32 @@ def user_create(
         user_id = UserQueries.create_user(conn, profile)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "user create",
-            "data": {"user_id": user_id, "profile": {
-                "age": age, "sex": sex, "height_inches": height,
-                "weight_lbs": weight, "activity_level": activity,
-                "goal": goal, "target_weight_lbs": target_weight,
-            }},
-            "human_summary": f"Created user profile (ID: {user_id})",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "user create",
+                "data": {
+                    "user_id": user_id,
+                    "profile": {
+                        "age": age,
+                        "sex": sex,
+                        "height_inches": height,
+                        "weight_lbs": weight,
+                        "activity_level": activity,
+                        "goal": goal,
+                        "target_weight_lbs": target_weight,
+                    },
+                },
+                "human_summary": f"Created user profile (ID: {user_id})",
+            }
+        )
     else:
         console.print(f"[green]Created user profile (ID: {user_id})[/green]")
 
 
 @user_app.command("show")
 def user_show(
-    user_id: Optional[int] = typer.Option(None, "--id", help="User ID (default: first user)"),
+    user_id: int | None = typer.Option(None, "--id", help="User ID (default: first user)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show user profile."""
@@ -3158,35 +3419,47 @@ def user_show(
 
     if profile is None:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "user show",
-                "errors": ["No user profile found"],
-                "suggestions": ["Create a profile with: llmn user create --age 35 --sex male --height 70 --weight 180"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "user show",
+                    "errors": ["No user profile found"],
+                    "suggestions": [
+                        "Create a profile with: llmn user create --age 35 "
+                        "--sex male --height 70 --weight 180"
+                    ],
+                }
+            )
         else:
             console.print("[red]No user profile found[/red]")
-            console.print("Create one with: llmn user create --age 35 --sex male --height 70 --weight 180")
+            console.print(
+                "Create one with: llmn user create --age 35 --sex male --height 70 --weight 180"
+            )
         raise typer.Exit(1)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "user show",
-            "data": {
-                "user_id": profile.user_id,
-                "age": profile.age,
-                "sex": profile.sex,
-                "height_inches": profile.height_inches,
-                "weight_lbs": profile.weight_lbs,
-                "activity_level": profile.activity_level,
-                "goal": profile.goal,
-                "target_weight_lbs": profile.target_weight_lbs,
-                "diet_type": profile.diet_type,
-                "diet_style": profile.diet_style,
-            },
-            "human_summary": f"User {profile.user_id}: {profile.sex}, {profile.age}y, {profile.height_inches}in, {profile.weight_lbs}lbs",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "user show",
+                "data": {
+                    "user_id": profile.user_id,
+                    "age": profile.age,
+                    "sex": profile.sex,
+                    "height_inches": profile.height_inches,
+                    "weight_lbs": profile.weight_lbs,
+                    "activity_level": profile.activity_level,
+                    "goal": profile.goal,
+                    "target_weight_lbs": profile.target_weight_lbs,
+                    "diet_type": profile.diet_type,
+                    "diet_style": profile.diet_style,
+                },
+                "human_summary": (
+                    f"User {profile.user_id}: {profile.sex}, {profile.age}y, "
+                    f"{profile.height_inches}in, {profile.weight_lbs}lbs"
+                ),
+            }
+        )
     else:
         console.print(f"[bold]User Profile (ID: {profile.user_id})[/bold]")
         console.print(f"  Age: {profile.age}")
@@ -3206,31 +3479,35 @@ def user_show(
 
 @user_app.command("update")
 def user_update(
-    user_id: Optional[int] = typer.Option(None, "--id", help="User ID (default: first user)"),
-    weight: Optional[float] = typer.Option(None, "--weight", help="Update current weight"),
-    goal: Optional[str] = typer.Option(None, "--goal", help="Update goal"),
-    activity: Optional[str] = typer.Option(None, "--activity", help="Update activity level"),
-    diet_type: Optional[str] = typer.Option(
+    user_id: int | None = typer.Option(None, "--id", help="User ID (default: first user)"),
+    weight: float | None = typer.Option(None, "--weight", help="Update current weight"),
+    goal: str | None = typer.Option(None, "--goal", help="Update goal"),
+    activity: str | None = typer.Option(None, "--activity", help="Update activity level"),
+    diet_type: str | None = typer.Option(
         None, "--diet-type", help="Diet type (omnivore/pescatarian/vegetarian/vegan)"
     ),
-    diet_style: Optional[str] = typer.Option(
-        None, "--diet-style", help="Diet style (standard/slow_carb/low_carb/keto/mediterranean/paleo)"
+    diet_style: str | None = typer.Option(
+        None,
+        "--diet-style",
+        help="Diet style (standard/slow_carb/low_carb/keto/mediterranean/paleo)",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Update user profile."""
+    from llmn.tracking.models import VALID_DIET_STYLES, VALID_DIET_TYPES
     from llmn.tracking.queries import UserQueries
-    from llmn.tracking.models import VALID_DIET_TYPES, VALID_DIET_STYLES
 
     # Validate diet_type and diet_style before querying database
     if diet_type is not None and diet_type not in VALID_DIET_TYPES:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "user update",
-                "errors": [f"Invalid diet type: {diet_type}"],
-                "suggestions": [f"Valid options: {', '.join(VALID_DIET_TYPES)}"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "user update",
+                    "errors": [f"Invalid diet type: {diet_type}"],
+                    "suggestions": [f"Valid options: {', '.join(VALID_DIET_TYPES)}"],
+                }
+            )
         else:
             console.print(f"[red]Invalid diet type: {diet_type}[/red]")
             console.print(f"Valid options: {', '.join(VALID_DIET_TYPES)}")
@@ -3238,12 +3515,14 @@ def user_update(
 
     if diet_style is not None and diet_style not in VALID_DIET_STYLES:
         if json_output:
-            output_json({
-                "success": False,
-                "command": "user update",
-                "errors": [f"Invalid diet style: {diet_style}"],
-                "suggestions": [f"Valid options: {', '.join(VALID_DIET_STYLES)}"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": "user update",
+                    "errors": [f"Invalid diet style: {diet_style}"],
+                    "suggestions": [f"Valid options: {', '.join(VALID_DIET_STYLES)}"],
+                }
+            )
         else:
             console.print(f"[red]Invalid diet style: {diet_style}[/red]")
             console.print(f"Valid options: {', '.join(VALID_DIET_STYLES)}")
@@ -3258,11 +3537,13 @@ def user_update(
 
         if profile is None:
             if json_output:
-                output_json({
-                    "success": False,
-                    "command": "user update",
-                    "errors": ["No user profile found"],
-                })
+                output_json(
+                    {
+                        "success": False,
+                        "command": "user update",
+                        "errors": ["No user profile found"],
+                    }
+                )
             else:
                 console.print("[red]No user profile found[/red]")
             raise typer.Exit(1)
@@ -3290,12 +3571,14 @@ def user_update(
         UserQueries.update_user(conn, profile)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "user update",
-            "data": {"user_id": profile.user_id},
-            "human_summary": "Profile updated",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "user update",
+                "data": {"user_id": profile.user_id},
+                "human_summary": "Profile updated",
+            }
+        )
     else:
         console.print("[green]Profile updated[/green]")
 
@@ -3308,11 +3591,11 @@ def user_update(
 @weight_app.command("add")
 def weight_add(
     weight: float = typer.Argument(..., help="Weight in lbs"),
-    date_str: Optional[str] = typer.Option(
+    date_str: str | None = typer.Option(
         None, "--date", "-d", help="Date (YYYY-MM-DD, default: today)"
     ),
-    notes: Optional[str] = typer.Option(None, "--notes", "-n", help="Optional notes"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID (default: first user)"),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Optional notes"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID (default: first user)"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Add a weight entry (gap-aware EMA trend computed automatically)."""
@@ -3326,9 +3609,7 @@ def weight_add(
     command = "weight add"
     try:
         if not math.isfinite(weight) or weight <= 0:
-            raise TrackingError(
-                "INVALID_WEIGHT", "Weight must be a finite, positive number."
-            )
+            raise TrackingError("INVALID_WEIGHT", "Weight must be a finite, positive number.")
         if date_str:
             try:
                 measured_at = date.fromisoformat(date_str)
@@ -3340,32 +3621,30 @@ def weight_add(
         else:
             measured_at = date.today()
         if measured_at > date.today():
-            raise TrackingError(
-                "FUTURE_DATE", "Weight measurements cannot be dated in the future."
-            )
+            raise TrackingError("FUTURE_DATE", "Weight measurements cannot be dated in the future.")
 
         db = get_db()
         with db.get_connection() as conn:
             profile = get_profile(conn, user_id)
             assert profile.user_id is not None
-            entry = WeightQueries.add_weight(
-                conn, profile.user_id, weight, measured_at, notes
-            )
+            entry = WeightQueries.add_weight(conn, profile.user_id, weight, measured_at, notes)
     except (TrackingError, ValueError) as error:
         tracking_failure(command, error, json_output)
         return
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": {
-                "weight_lbs": entry.weight_lbs,
-                "trend_lbs": round(entry.trend_lbs, 1),
-                "measured_at": entry.measured_at.isoformat(),
-            },
-            "human_summary": f"Logged {weight:.1f} lbs, trend: {entry.trend_lbs:.1f} lbs",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": {
+                    "weight_lbs": entry.weight_lbs,
+                    "trend_lbs": round(entry.trend_lbs, 1),
+                    "measured_at": entry.measured_at.isoformat(),
+                },
+                "human_summary": f"Logged {weight:.1f} lbs, trend: {entry.trend_lbs:.1f} lbs",
+            }
+        )
     else:
         console.print(f"[green]Logged:[/green] {weight:.1f} lbs on {measured_at}")
         console.print(f"[blue]Trend:[/blue] {entry.trend_lbs:.1f} lbs (EMA)")
@@ -3374,7 +3653,7 @@ def weight_add(
 @weight_app.command("delete")
 def weight_delete(
     date_str: str = typer.Option(..., "--date", "-d", help="Date (YYYY-MM-DD)"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Delete a weight entry and rebuild subsequent trends."""
@@ -3393,20 +3672,20 @@ def weight_delete(
             assert profile.user_id is not None
             deleted = WeightQueries.delete_weight(conn, profile.user_id, measured_at)
         if not deleted:
-            raise TrackingError(
-                "WEIGHT_NOT_FOUND", f"No weight entry found on {measured_at}."
-            )
+            raise TrackingError("WEIGHT_NOT_FOUND", f"No weight entry found on {measured_at}.")
     except (TrackingError, ValueError) as error:
         tracking_failure(command, error, json_output)
         return
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": {"measured_at": measured_at.isoformat(), "deleted": True},
-            "human_summary": f"Deleted weight entry for {measured_at}.",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": {"measured_at": measured_at.isoformat(), "deleted": True},
+                "human_summary": f"Deleted weight entry for {measured_at}.",
+            }
+        )
     else:
         console.print(f"[green]Deleted[/green] weight entry for {measured_at}")
 
@@ -3414,7 +3693,7 @@ def weight_delete(
 @weight_app.command("list")
 def weight_list(
     days: int = typer.Option(30, "--days", "-d", help="Number of days to show"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List weight history with trends."""
@@ -3438,27 +3717,35 @@ def weight_list(
 
     if not history:
         if json_output:
-            output_json({"success": True, "data": {"entries": []}, "human_summary": "No weight entries found"})
+            output_json(
+                {
+                    "success": True,
+                    "data": {"entries": []},
+                    "human_summary": "No weight entries found",
+                }
+            )
         else:
             console.print("No weight entries found")
         return
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "weight list",
-            "data": {
-                "entries": [
-                    {
-                        "date": e.measured_at.isoformat(),
-                        "weight_lbs": e.weight_lbs,
-                        "trend_lbs": round(e.trend_lbs, 1),
-                    }
-                    for e in history
-                ]
-            },
-            "human_summary": f"{len(history)} entries over {days} days",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "weight list",
+                "data": {
+                    "entries": [
+                        {
+                            "date": e.measured_at.isoformat(),
+                            "weight_lbs": e.weight_lbs,
+                            "trend_lbs": round(e.trend_lbs, 1),
+                        }
+                        for e in history
+                    ]
+                },
+                "human_summary": f"{len(history)} entries over {days} days",
+            }
+        )
     else:
         table = Table(title=f"Weight History (last {days} days)")
         table.add_column("Date", style="cyan")
@@ -3487,7 +3774,7 @@ def weight_list(
 @weight_app.command("trend")
 def weight_trend(
     days: int = typer.Option(30, "--days", "-d", help="Days to analyze"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show weight trend analysis."""
@@ -3518,19 +3805,23 @@ def weight_trend(
         raise typer.Exit(1)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": "weight trend",
-            "data": {
-                "current_weight_lbs": report.current_weight,
-                "current_trend_lbs": round(report.current_trend, 1),
-                "trend_change_lbs": round(report.trend_change, 1),
-                "weekly_rate_lbs": round(report.weekly_rate, 2),
-                "implied_daily_deficit_kcal": round(report.implied_daily_deficit, 0),
-                "period_days": report.period_days,
-            },
-            "human_summary": f"Trend: {report.current_trend:.1f} lbs, {report.weekly_rate:+.1f} lbs/week",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "weight trend",
+                "data": {
+                    "current_weight_lbs": report.current_weight,
+                    "current_trend_lbs": round(report.current_trend, 1),
+                    "trend_change_lbs": round(report.trend_change, 1),
+                    "weekly_rate_lbs": round(report.weekly_rate, 2),
+                    "implied_daily_deficit_kcal": round(report.implied_daily_deficit, 0),
+                    "period_days": report.period_days,
+                },
+                "human_summary": (
+                    f"Trend: {report.current_trend:.1f} lbs, {report.weekly_rate:+.1f} lbs/week"
+                ),
+            }
+        )
     else:
         console.print(format_weight_report(report))
 
@@ -3543,11 +3834,11 @@ def weight_trend(
 @calories_app.command("log")
 def calories_log(
     calories: float = typer.Argument(..., help="Planned calories"),
-    date_str: Optional[str] = typer.Option(
+    date_str: str | None = typer.Option(
         None, "--date", "-d", help="Date (YYYY-MM-DD, default: today)"
     ),
-    notes: Optional[str] = typer.Option(None, "--notes", "-n", help="Optional notes"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Optional notes"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Log planned calorie intake for a day (not consumed intake)."""
@@ -3561,19 +3852,13 @@ def calories_log(
     command = "calories log"
     try:
         if not math.isfinite(calories) or calories < 0:
-            raise TrackingError(
-                "INVALID_INTAKE", "Calories must be a finite, non-negative number."
-            )
-        log_date = (
-            date.fromisoformat(date_str) if date_str else date.today()
-        )
+            raise TrackingError("INVALID_INTAKE", "Calories must be a finite, non-negative number.")
+        log_date = date.fromisoformat(date_str) if date_str else date.today()
         db = get_db()
         with db.get_connection() as conn:
             profile = get_profile(conn, user_id)
             assert profile.user_id is not None
-            entry = CalorieQueries.log_calories(
-                conn, profile.user_id, log_date, calories, notes
-            )
+            entry = CalorieQueries.log_calories(conn, profile.user_id, log_date, calories, notes)
             IntakeQueries.upsert(
                 conn,
                 profile.user_id,
@@ -3590,20 +3875,22 @@ def calories_log(
         return
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": {
-                "date": entry.date.isoformat(),
-                "planned_calories": entry.planned_calories,
-                "kind": "planned",
-            },
-            "warnings": [
-                "Planned intake is not used as measured consumption. "
-                "Use 'llmn intake log' for actual intake."
-            ],
-            "human_summary": f"Logged {calories:.0f} planned kcal for {log_date}",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": {
+                    "date": entry.date.isoformat(),
+                    "planned_calories": entry.planned_calories,
+                    "kind": "planned",
+                },
+                "warnings": [
+                    "Planned intake is not used as measured consumption. "
+                    "Use 'llmn intake log' for actual intake."
+                ],
+                "human_summary": f"Logged {calories:.0f} planned kcal for {log_date}",
+            }
+        )
     else:
         console.print(f"[green]Logged planned:[/green] {calories:.0f} kcal for {log_date}")
         console.print("[dim]Planned values are not used as actual intake.[/dim]")
@@ -3612,7 +3899,7 @@ def calories_log(
 @calories_app.command("list")
 def calories_list(
     days: int = typer.Option(30, "--days", "-d", help="Days to show"),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """List calorie log history."""
@@ -3638,30 +3925,37 @@ def calories_list(
             raise typer.Exit(1)
 
         history = CalorieQueries.get_calorie_history(
-            conn, profile.user_id, start_date, end_date  # type: ignore
+            conn,
+            profile.user_id,
+            start_date,
+            end_date,  # type: ignore
         )
 
     if not history:
         if json_output:
-            output_json({"success": True, "data": {"entries": []}, "human_summary": "No calorie entries"})
+            output_json(
+                {"success": True, "data": {"entries": []}, "human_summary": "No calorie entries"}
+            )
         else:
             console.print("No calorie entries found")
         return
 
     if json_output:
         avg = sum(e.planned_calories for e in history) / len(history)
-        output_json({
-            "success": True,
-            "command": "calories list",
-            "data": {
-                "entries": [
-                    {"date": e.date.isoformat(), "planned_calories": e.planned_calories}
-                    for e in history
-                ],
-                "average_calories": round(avg, 0),
-            },
-            "human_summary": f"{len(history)} entries, avg {avg:.0f} kcal/day",
-        })
+        output_json(
+            {
+                "success": True,
+                "command": "calories list",
+                "data": {
+                    "entries": [
+                        {"date": e.date.isoformat(), "planned_calories": e.planned_calories}
+                        for e in history
+                    ],
+                    "average_calories": round(avg, 0),
+                },
+                "human_summary": f"{len(history)} entries, avg {avg:.0f} kcal/day",
+            }
+        )
     else:
         table = Table(title=f"Calorie Log (last {days} days)")
         table.add_column("Date", style="cyan")
@@ -3683,10 +3977,8 @@ def calories_list(
 
 @tdee_app.command("estimate")
 def tdee_estimate(
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
-    as_of_str: Optional[str] = typer.Option(
-        None, "--as-of", help="Analysis date (default: today)"
-    ),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    as_of_str: str | None = typer.Option(None, "--as-of", help="Analysis date (default: today)"),
     window_days: int = typer.Option(
         28, "--window-days", help="Inclusive analysis window in calendar days"
     ),
@@ -3701,14 +3993,10 @@ def tdee_estimate(
     command = "tdee estimate"
     try:
         if window_days < 2:
-            raise TrackingError(
-                "INVALID_WINDOW", "--window-days must be at least 2."
-            )
+            raise TrackingError("INVALID_WINDOW", "--window-days must be at least 2.")
         as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
         if as_of > date.today():
-            raise TrackingError(
-                "FUTURE_DATE", "--as-of cannot be in the future."
-            )
+            raise TrackingError("FUTURE_DATE", "--as-of cannot be in the future.")
         db = get_db()
         with db.get_connection() as conn:
             analysis = analyze_and_persist(conn, user_id, as_of, window_days)
@@ -3722,15 +4010,17 @@ def tdee_estimate(
     data["input_fingerprint"] = estimate.fingerprint
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": data,
-            "warnings": analysis.warnings,
-            "suggestions": [],
-            "human_summary": analysis.recommendation.recommendation_text,
-            "schema_version": 2,
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": data,
+                "warnings": analysis.warnings,
+                "suggestions": [],
+                "human_summary": analysis.recommendation.recommendation_text,
+                "schema_version": 2,
+            }
+        )
     else:
         console.print("[bold]Expenditure Estimate[/bold]")
         console.print(f"  Method: {estimate.method}")
@@ -3744,7 +4034,8 @@ def tdee_estimate(
                 else ""
             )
             console.print(
-                f"  [bold]Estimated expenditure: {estimate.kcal_per_day:.0f}{uncertainty} kcal/day[/bold]"
+                f"  [bold]Estimated expenditure: "
+                f"{estimate.kcal_per_day:.0f}{uncertainty} kcal/day[/bold]"
             )
         console.print(f"  Calendar segments used: {estimate.segments_used}")
         console.print(
@@ -3757,10 +4048,8 @@ def tdee_estimate(
 
 @tdee_app.command("targets")
 def tdee_targets(
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
-    as_of_str: Optional[str] = typer.Option(
-        None, "--as-of", help="Analysis date (default: today)"
-    ),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
+    as_of_str: str | None = typer.Option(None, "--as-of", help="Analysis date (default: today)"),
     window_days: int = typer.Option(
         28, "--window-days", help="Inclusive analysis window in calendar days"
     ),
@@ -3775,14 +4064,10 @@ def tdee_targets(
     command = "tdee targets"
     try:
         if window_days < 2:
-            raise TrackingError(
-                "INVALID_WINDOW", "--window-days must be at least 2."
-            )
+            raise TrackingError("INVALID_WINDOW", "--window-days must be at least 2.")
         as_of = date.fromisoformat(as_of_str) if as_of_str else date.today()
         if as_of > date.today():
-            raise TrackingError(
-                "FUTURE_DATE", "--as-of cannot be in the future."
-            )
+            raise TrackingError("FUTURE_DATE", "--as-of cannot be in the future.")
         db = get_db()
         with db.get_connection() as conn:
             analysis = analyze(conn, user_id, as_of, window_days)
@@ -3796,49 +4081,49 @@ def tdee_targets(
 
     data = analysis.to_dict()
     # Compatibility fields retained from the previous flat targets payload.
-    data.update({
-        "tdee": (
-            round(estimate.kcal_per_day, 0)
-            if estimate.kcal_per_day is not None
-            else None
-        ),
-        "tdee_uncertainty": (
-            round(estimate.uncertainty_95ci, 0)
-            if estimate.uncertainty_95ci is not None
-            else None
-        ),
-        "goal_description": (
-            f"{goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)"
-            if goal
-            else None
-        ),
-        "target_rate_lbs_week": goal.rate_lbs_per_week if goal else None,
-        "current_rate_lbs_week": (
-            round(estimate.observed_rate_lbs_per_week, 2)
-            if estimate.observed_rate_lbs_per_week is not None
-            else None
-        ),
-        "current_intake": (
-            round(estimate.intake.mean_kcal, 0)
-            if estimate.intake.mean_kcal is not None
-            else None
-        ),
-        "recommended_intake": recommendation.target_kcal_per_day,
-        "protein_min": recommendation.protein_min_g,
-        "protein_max": recommendation.protein_max_g,
-        "recommendation_text": recommendation.recommendation_text,
-    })
+    data.update(
+        {
+            "tdee": (
+                round(estimate.kcal_per_day, 0) if estimate.kcal_per_day is not None else None
+            ),
+            "tdee_uncertainty": (
+                round(estimate.uncertainty_95ci, 0)
+                if estimate.uncertainty_95ci is not None
+                else None
+            ),
+            "goal_description": (
+                f"{goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)" if goal else None
+            ),
+            "target_rate_lbs_week": goal.rate_lbs_per_week if goal else None,
+            "current_rate_lbs_week": (
+                round(estimate.observed_rate_lbs_per_week, 2)
+                if estimate.observed_rate_lbs_per_week is not None
+                else None
+            ),
+            "current_intake": (
+                round(estimate.intake.mean_kcal, 0)
+                if estimate.intake.mean_kcal is not None
+                else None
+            ),
+            "recommended_intake": recommendation.target_kcal_per_day,
+            "protein_min": recommendation.protein_min_g,
+            "protein_max": recommendation.protein_max_g,
+            "recommendation_text": recommendation.recommendation_text,
+        }
+    )
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": data,
-            "warnings": analysis.warnings,
-            "suggestions": [],
-            "human_summary": recommendation.recommendation_text,
-            "schema_version": 2,
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": data,
+                "warnings": analysis.warnings,
+                "suggestions": [],
+                "human_summary": recommendation.recommendation_text,
+                "schema_version": 2,
+            }
+        )
     else:
         console.print("[bold]Adaptive Calorie Targets[/bold]")
         console.print(f"  Assessment: {recommendation.assessment}")
@@ -3853,9 +4138,7 @@ def tdee_targets(
                 f"({estimate.method})"
             )
         if goal:
-            console.print(
-                f"  Goal: {goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)"
-            )
+            console.print(f"  Goal: {goal.mode} ({goal.rate_lbs_per_week:+.2f} lbs/week)")
         else:
             console.print("  Goal: not set")
 
@@ -3863,12 +4146,8 @@ def tdee_targets(
             console.print()
             console.print("[bold]Current status:[/bold]")
             if estimate.intake.mean_kcal is not None:
-                console.print(
-                    f"  Average actual intake: {estimate.intake.mean_kcal:.0f} kcal/day"
-                )
-            console.print(
-                f"  Observed rate: {estimate.observed_rate_lbs_per_week:+.2f} lbs/week"
-            )
+                console.print(f"  Average actual intake: {estimate.intake.mean_kcal:.0f} kcal/day")
+            console.print(f"  Observed rate: {estimate.observed_rate_lbs_per_week:+.2f} lbs/week")
             console.print(
                 f"  Intake coverage: {estimate.intake.weighted_coverage:.0%} "
                 f"({estimate.intake.complete_days} complete days)"
@@ -3901,10 +4180,8 @@ def tdee_targets(
 @tdee_app.command("progress")
 def tdee_progress(
     days: int = typer.Option(30, "--days", "-d", help="Calendar days to analyze"),
-    as_of_str: Optional[str] = typer.Option(
-        None, "--as-of", help="Analysis date (default: today)"
-    ),
-    user_id: Optional[int] = typer.Option(None, "--user", help="User ID"),
+    as_of_str: str | None = typer.Option(None, "--as-of", help="Analysis date (default: today)"),
+    user_id: int | None = typer.Option(None, "--user", help="User ID"),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
 ) -> None:
     """Show a progress report plus the shared standalone analysis."""
@@ -3926,9 +4203,7 @@ def tdee_progress(
         with db.get_connection() as conn:
             profile = get_profile(conn, user_id)
             assert profile.user_id is not None
-            report = generate_progress_report(
-                conn, profile.user_id, days, as_of=as_of
-            )
+            report = generate_progress_report(conn, profile.user_id, days, as_of=as_of)
             analysis = analyze(conn, user_id, as_of, days)
     except (TrackingError, ValueError) as error:
         tracking_failure(command, error, json_output)
@@ -3936,83 +4211,75 @@ def tdee_progress(
 
     if report is None:
         if json_output:
-            output_json({
-                "success": False,
-                "command": command,
-                "errors": ["Not enough weight data for progress report"],
-                "suggestions": ["Log at least 2 weight entries with: llmn weight add <weight>"],
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": command,
+                    "errors": ["Not enough weight data for progress report"],
+                    "suggestions": ["Log at least 2 weight entries with: llmn weight add <weight>"],
+                }
+            )
         else:
             console.print("[yellow]Not enough weight data for progress report[/yellow]")
             console.print("Log weight with: llmn weight add <weight>")
         raise typer.Exit(1)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": {
-                "weight": {
-                    "current_weight": report.weight.current_weight,
-                    "current_trend": report.weight.current_trend,
-                    "trend_change": report.weight.trend_change,
-                    "weekly_rate": report.weight.weekly_rate,
-                    "implied_daily_deficit": report.weight.implied_daily_deficit,
-                    "period_days": report.weight.period_days,
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": {
+                    "weight": {
+                        "current_weight": report.weight.current_weight,
+                        "current_trend": report.weight.current_trend,
+                        "trend_change": report.weight.trend_change,
+                        "weekly_rate": report.weight.weekly_rate,
+                        "implied_daily_deficit": report.weight.implied_daily_deficit,
+                        "period_days": report.weight.period_days,
+                    },
+                    "tdee": {
+                        "mifflin_tdee": report.tdee.mifflin_tdee,
+                        "tdee_bias": report.tdee.tdee_bias,
+                        "adjusted_tdee": report.tdee.adjusted_tdee,
+                        "uncertainty_95ci": report.tdee.uncertainty_95ci,
+                        "avg_actual_calories": report.tdee.avg_actual_calories,
+                        "avg_planned_calories": report.tdee.avg_actual_calories,
+                        "expected_deficit": report.tdee.expected_deficit,
+                        "implied_deficit": report.tdee.implied_deficit,
+                    }
+                    if report.tdee
+                    else None,
+                    "goal_weight": report.goal_weight,
+                    "remaining_lbs": report.remaining_lbs,
+                    "weeks_to_goal": report.weeks_to_goal,
+                    "notes": report.notes,
+                    "analysis": analysis.to_dict(),
                 },
-                "tdee": {
-                    "mifflin_tdee": report.tdee.mifflin_tdee,
-                    "tdee_bias": report.tdee.tdee_bias,
-                    "adjusted_tdee": report.tdee.adjusted_tdee,
-                    "uncertainty_95ci": report.tdee.uncertainty_95ci,
-                    "avg_actual_calories": report.tdee.avg_actual_calories,
-                    "avg_planned_calories": report.tdee.avg_actual_calories,
-                    "expected_deficit": report.tdee.expected_deficit,
-                    "implied_deficit": report.tdee.implied_deficit,
-                } if report.tdee else None,
-                "goal_weight": report.goal_weight,
-                "remaining_lbs": report.remaining_lbs,
-                "weeks_to_goal": report.weeks_to_goal,
-                "notes": report.notes,
-                "analysis": analysis.to_dict(),
-            },
-            "warnings": analysis.warnings,
-            "human_summary": analysis.recommendation.recommendation_text,
-            "schema_version": 2,
-        })
+                "warnings": analysis.warnings,
+                "human_summary": analysis.recommendation.recommendation_text,
+                "schema_version": 2,
+            }
+        )
     else:
         console.print(format_progress_report(report))
         console.print()
-        console.print(
-            f"[bold]Assessment:[/bold] {analysis.recommendation.assessment}"
-        )
+        console.print(f"[bold]Assessment:[/bold] {analysis.recommendation.assessment}")
         console.print(f"  {analysis.recommendation.recommendation_text}")
 
 
 @app.command("snack")
 def snack(
-    calories: float = typer.Option(
-        ..., "--calories", "-c", help="Remaining calories to target"
-    ),
-    protein: float = typer.Option(
-        0.0, "--protein", "-p", help="Minimum protein grams"
-    ),
-    max_carbs: Optional[float] = typer.Option(
-        None, "--max-carbs", help="Maximum carbohydrate grams"
-    ),
-    max_fat: Optional[float] = typer.Option(
-        None, "--max-fat", help="Maximum fat grams"
-    ),
+    calories: float = typer.Option(..., "--calories", "-c", help="Remaining calories to target"),
+    protein: float = typer.Option(0.0, "--protein", "-p", help="Minimum protein grams"),
+    max_carbs: float | None = typer.Option(None, "--max-carbs", help="Maximum carbohydrate grams"),
+    max_fat: float | None = typer.Option(None, "--max-fat", help="Maximum fat grams"),
     calorie_tolerance: float = typer.Option(
         30.0, "--calorie-tolerance", help="Allowed calorie deviation in kcal"
     ),
-    max_foods: int = typer.Option(
-        3, "--max-foods", help="Maximum foods per suggestion (1-3)"
-    ),
-    limit: int = typer.Option(
-        3, "--limit", "-n", help="Number of suggestions to return"
-    ),
-    tag: Optional[str] = typer.Option(
+    max_foods: int = typer.Option(3, "--max-foods", help="Maximum foods per suggestion (1-3)"),
+    limit: int = typer.Option(3, "--limit", "-n", help="Number of suggestions to return"),
+    tag: str | None = typer.Option(
         None, "--tag", help="Only use foods with this tag (for example: staple)"
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
@@ -4042,15 +4309,17 @@ def snack(
         validate_request(request)
     except ValueError as error:
         if json_output:
-            output_json({
-                "success": False,
-                "command": command,
-                "data": {},
-                "errors": [str(error)],
-                "warnings": [],
-                "suggestions": [],
-                "human_summary": f"Error: {error}",
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": command,
+                    "data": {},
+                    "errors": [str(error)],
+                    "warnings": [],
+                    "suggestions": [],
+                    "human_summary": f"Error: {error}",
+                }
+            )
         else:
             console.print(f"[red]{error}[/red]")
         raise typer.Exit(1)
@@ -4059,15 +4328,17 @@ def snack(
     if not db.table_exists("foods") or db.get_table_count("foods") == 0:
         message = "Database not initialized with food data."
         if json_output:
-            output_json({
-                "success": False,
-                "command": command,
-                "data": {},
-                "errors": [message],
-                "warnings": [],
-                "suggestions": ["Run: llmn init <path-to-usda-csv>"],
-                "human_summary": f"Error: {message}",
-            })
+            output_json(
+                {
+                    "success": False,
+                    "command": command,
+                    "data": {},
+                    "errors": [message],
+                    "warnings": [],
+                    "suggestions": ["Run: llmn init <path-to-usda-csv>"],
+                    "human_summary": f"Error: {message}",
+                }
+            )
         else:
             console.print(f"[red]{message}[/red]")
             console.print("Run: [cyan]llmn init <path-to-usda-csv>[/cyan]")
@@ -4077,15 +4348,17 @@ def snack(
         result = suggest_snacks(conn, request)
 
     if json_output:
-        output_json({
-            "success": True,
-            "command": command,
-            "data": result.to_dict(),
-            "errors": [],
-            "warnings": list(result.warnings),
-            "suggestions": action_suggestions(result),
-            "human_summary": human_summary(result),
-        })
+        output_json(
+            {
+                "success": True,
+                "command": command,
+                "data": result.to_dict(),
+                "errors": [],
+                "warnings": list(result.warnings),
+                "suggestions": action_suggestions(result),
+                "human_summary": human_summary(result),
+            }
+        )
         return
 
     if not result.suggestions:
@@ -4097,11 +4370,7 @@ def snack(
     console.print(
         f"[bold]Snack suggestions[/bold] for {request.calories:.0f} kcal, "
         f"≥{request.protein_min:.0f} g protein"
-        + (
-            f", ≤{request.max_carbs:.0f} g carbs"
-            if request.max_carbs is not None
-            else ""
-        )
+        + (f", ≤{request.max_carbs:.0f} g carbs" if request.max_carbs is not None else "")
         + (f", ≤{request.max_fat:.0f} g fat" if request.max_fat is not None else "")
     )
     for index, suggestion in enumerate(result.suggestions, start=1):
@@ -4111,8 +4380,7 @@ def snack(
     if request.include_tag is None:
         console.print()
         console.print(
-            "[dim]Tip: use --tag staple to limit suggestions to your curated "
-            "everyday foods.[/dim]"
+            "[dim]Tip: use --tag staple to limit suggestions to your curated everyday foods.[/dim]"
         )
 
 

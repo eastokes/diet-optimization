@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 from string import Template
-from typing import Optional
 
 import yaml
 
@@ -154,7 +153,8 @@ $PREPARATION_NOTES
 
 ## Request
 
-Create a $NUM_DAYS-day meal plan using EXACTLY the food quantities listed above (scaled appropriately for $NUM_DAYS days).
+Create a $NUM_DAYS-day meal plan using EXACTLY the food quantities listed above
+(scaled appropriately for $NUM_DAYS days).
 
 For each day, provide:
 1. **Breakfast** - prep time, ingredients with amounts, brief instructions
@@ -175,7 +175,7 @@ $ADDITIONAL_NOTES
 class LLMPromptGenerator:
     """Generate prompts for LLM-based recipe generation."""
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, config_dir: Path | None = None):
         """Initialize the generator.
 
         Args:
@@ -183,8 +183,8 @@ class LLMPromptGenerator:
                         Defaults to ~/.llmn/
         """
         self.config_dir = config_dir or Path.home() / ".llmn"
-        self._template: Optional[str] = None
-        self._preferences: Optional[dict] = None
+        self._template: str | None = None
+        self._preferences: dict | None = None
 
     @property
     def template(self) -> str:
@@ -224,7 +224,7 @@ class LLMPromptGenerator:
         self,
         result: OptimizationResult,
         days: int = 1,
-        profile_name: Optional[str] = None,
+        profile_name: str | None = None,
     ) -> str:
         """Generate a complete LLM prompt from optimization result.
 
@@ -295,9 +295,7 @@ class LLMPromptGenerator:
         if prep_states["raw"]:
             prep_notes.append("- Foods marked (raw) should be cooked before serving")
         if prep_states["cooked"]:
-            prep_notes.append(
-                "- Foods marked (cooked) are pre-cooked; reheat or use directly"
-            )
+            prep_notes.append("- Foods marked (cooked) are pre-cooked; reheat or use directly")
         if prep_states["canned"]:
             prep_notes.append("- Foods marked (canned) are ready to use as-is")
         preparation_notes = "\n".join(prep_notes) if prep_notes else "None"
@@ -357,7 +355,11 @@ class LLMPromptGenerator:
             "max_prep_time": "30 minutes",
             "equipment": ["stovetop", "oven", "blender"],
             "flavor_notes": "Prefer savory over sweet\nLike spicy food\nEnjoy garlic and herbs",
-            "additional_notes": "I meal prep on Sundays for the week\nPrefer meals that reheat well\nBreakfast should be quick (under 10 min)",
+            "additional_notes": (
+                "I meal prep on Sundays for the week\n"
+                "Prefer meals that reheat well\n"
+                "Breakfast should be quick (under 10 min)"
+            ),
         }
 
         with open(pref_path, "w") as f:
@@ -369,8 +371,8 @@ class LLMPromptGenerator:
 def generate_llm_prompt(
     result: OptimizationResult,
     days: int = 1,
-    profile_name: Optional[str] = None,
-    config_dir: Optional[Path] = None,
+    profile_name: str | None = None,
+    config_dir: Path | None = None,
 ) -> str:
     """Convenience function to generate an LLM prompt.
 

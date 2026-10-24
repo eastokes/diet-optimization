@@ -5,8 +5,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Optional
-
 
 # Valid diet types and styles for validation
 VALID_DIET_TYPES = ("omnivore", "pescatarian", "vegetarian", "vegan")
@@ -23,17 +21,17 @@ VALID_ACTIVITY_LEVELS = ("sedentary", "lightly_active", "moderate", "active", "v
 class UserProfile:
     """User profile for weight tracking and TDEE calculations."""
 
-    user_id: Optional[int]
+    user_id: int | None
     age: int
     sex: str  # 'male' or 'female'
     height_inches: float
     weight_lbs: float
     activity_level: str  # 'sedentary', 'lightly_active', 'moderate', 'active', 'very_active'
-    goal: Optional[str] = None  # e.g., 'fat_loss:185:165'
-    target_weight_lbs: Optional[float] = None
-    diet_type: Optional[str] = None  # 'omnivore', 'pescatarian', 'vegetarian', 'vegan'
-    diet_style: Optional[str] = None  # 'standard', 'slow_carb', 'low_carb', etc.
-    created_at: Optional[datetime] = None
+    goal: str | None = None  # e.g., 'fat_loss:185:165'
+    target_weight_lbs: float | None = None
+    diet_type: str | None = None  # 'omnivore', 'pescatarian', 'vegetarian', 'vegan'
+    diet_style: str | None = None  # 'standard', 'slow_carb', 'low_carb', etc.
+    created_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if self.sex not in ("male", "female"):
@@ -50,9 +48,7 @@ class UserProfile:
                 f"activity_level must be one of {valid_levels}, got '{self.activity_level}'"
             )
         if self.diet_type is not None and self.diet_type not in VALID_DIET_TYPES:
-            raise ValueError(
-                f"diet_type must be one of {VALID_DIET_TYPES}, got '{self.diet_type}'"
-            )
+            raise ValueError(f"diet_type must be one of {VALID_DIET_TYPES}, got '{self.diet_type}'")
         if self.diet_style is not None and self.diet_style not in VALID_DIET_STYLES:
             raise ValueError(
                 f"diet_style must be one of {VALID_DIET_STYLES}, got '{self.diet_style}'"
@@ -63,23 +59,23 @@ class UserProfile:
 class WeightEntry:
     """A single weight log entry with EMA trend."""
 
-    log_id: Optional[int]
+    log_id: int | None
     user_id: int
     weight_lbs: float
     trend_lbs: float
     measured_at: date
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @dataclass
 class CalorieEntry:
     """A legacy planned-calorie log entry."""
 
-    log_id: Optional[int]
+    log_id: int | None
     user_id: int
     date: date
     planned_calories: float
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @dataclass
@@ -91,7 +87,7 @@ class IntakeEntry:
     are excluded from measured-intake learning until deliberately classified.
     """
 
-    intake_id: Optional[int]
+    intake_id: int | None
     user_id: int
     date: date
     kcal: float
@@ -99,16 +95,14 @@ class IntakeEntry:
     completeness: str = "complete"
     quality: str = "measured"
     provenance: str = "manual"
-    notes: Optional[str] = None
+    notes: str | None = None
     revision: int = 1
 
     def __post_init__(self) -> None:
         if not math.isfinite(self.kcal) or self.kcal < 0:
             raise ValueError("kcal must be a finite, non-negative number")
         if self.kind not in VALID_INTAKE_KINDS:
-            raise ValueError(
-                f"kind must be one of {VALID_INTAKE_KINDS}, got '{self.kind}'"
-            )
+            raise ValueError(f"kind must be one of {VALID_INTAKE_KINDS}, got '{self.kind}'")
         if self.completeness not in VALID_COMPLETENESS:
             raise ValueError(
                 f"completeness must be one of {VALID_COMPLETENESS}, got '{self.completeness}'"
@@ -125,14 +119,14 @@ class GoalPeriod:
     and positive for gain.
     """
 
-    goal_id: Optional[int]
+    goal_id: int | None
     user_id: int
     effective_from: date
     mode: str
     rate_lbs_per_week: float
-    target_weight_lbs: Optional[float] = None
-    training_priority: Optional[str] = None
-    notes: Optional[str] = None
+    target_weight_lbs: float | None = None
+    training_priority: str | None = None
+    notes: str | None = None
 
     def __post_init__(self) -> None:
         if self.mode not in VALID_GOAL_MODES:
@@ -155,12 +149,12 @@ class GoalPeriod:
 class ActivityPeriod:
     """An effective-dated activity/training context period."""
 
-    activity_id: Optional[int]
+    activity_id: int | None
     user_id: int
     effective_from: date
     activity_level: str
-    training_priority: Optional[str] = None
-    notes: Optional[str] = None
+    training_priority: str | None = None
+    notes: str | None = None
 
     def __post_init__(self) -> None:
         if self.activity_level not in VALID_ACTIVITY_LEVELS:
@@ -174,21 +168,21 @@ class ActivityPeriod:
 class TDEEEstimate:
     """TDEE estimate from the expenditure filter."""
 
-    estimate_id: Optional[int]
+    estimate_id: int | None
     user_id: int
     estimated_at: date
     mifflin_tdee: float
     tdee_bias: float
     variance: float
     adjusted_tdee: float
-    method: Optional[str] = None
-    policy_version: Optional[str] = None
-    interval_start: Optional[date] = None
-    interval_end: Optional[date] = None
-    weight_observations: Optional[int] = None
-    complete_intake_days: Optional[int] = None
-    partial_intake_days: Optional[int] = None
-    input_fingerprint: Optional[str] = None
+    method: str | None = None
+    policy_version: str | None = None
+    interval_start: date | None = None
+    interval_end: date | None = None
+    weight_observations: int | None = None
+    complete_intake_days: int | None = None
+    partial_intake_days: int | None = None
+    input_fingerprint: str | None = None
 
     @property
     def uncertainty_95ci(self) -> float:

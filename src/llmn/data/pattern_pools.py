@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
 from llmn.data.dietary_patterns import (
     DietaryPattern,
@@ -30,7 +29,6 @@ from llmn.data.pattern_staples import (
     get_staples,
 )
 
-
 # USDA nutrient IDs
 ENERGY_ID = 1008
 PROTEIN_ID = 1003
@@ -40,9 +38,9 @@ def build_food_pool(
     conn: sqlite3.Connection,
     patterns: list[str],
     max_foods: int = 300,
-    min_protein_per_100g: Optional[float] = None,
-    min_calories_per_100g: Optional[float] = None,
-    max_calories_per_100g: Optional[float] = None,
+    min_protein_per_100g: float | None = None,
+    min_calories_per_100g: float | None = None,
+    max_calories_per_100g: float | None = None,
     require_calorie_data: bool = True,
     balance_categories: bool = True,
     use_staples: bool = True,
@@ -90,6 +88,7 @@ def build_food_pool(
             # Limit to max_foods
             if len(staple_ids) > max_foods:
                 import random
+
                 staple_ids = random.sample(staple_ids, max_foods)
 
             return staple_ids
@@ -122,6 +121,7 @@ def build_food_pool(
     elif len(food_ids) > max_foods:
         # Simple random sample
         import random
+
         food_ids = random.sample(food_ids, max_foods)
 
     return food_ids
@@ -164,9 +164,9 @@ def _get_staple_food_ids(
 def _filter_by_nutrients(
     conn: sqlite3.Connection,
     food_ids: list[int],
-    min_protein_per_100g: Optional[float] = None,
-    min_calories_per_100g: Optional[float] = None,
-    max_calories_per_100g: Optional[float] = None,
+    min_protein_per_100g: float | None = None,
+    min_calories_per_100g: float | None = None,
+    max_calories_per_100g: float | None = None,
 ) -> list[int]:
     """Filter food IDs by nutrient criteria."""
     if not food_ids:
@@ -215,9 +215,9 @@ def _filter_by_nutrients(
 def _query_foods_by_pattern(
     conn: sqlite3.Connection,
     pattern: DietaryPattern,
-    min_protein_per_100g: Optional[float] = None,
-    min_calories_per_100g: Optional[float] = None,
-    max_calories_per_100g: Optional[float] = None,
+    min_protein_per_100g: float | None = None,
+    min_calories_per_100g: float | None = None,
+    max_calories_per_100g: float | None = None,
     require_calorie_data: bool = True,
 ) -> list[int]:
     """Query foods matching a dietary pattern.
@@ -413,9 +413,7 @@ def list_excluded_foods(
     exclude_keywords = [kw.lower() for kw in pattern.exclude_keywords]
 
     # Find foods matching any exclude keyword
-    cursor = conn.execute(
-        "SELECT fdc_id, description FROM foods WHERE is_active = TRUE LIMIT 5000"
-    )
+    cursor = conn.execute("SELECT fdc_id, description FROM foods WHERE is_active = TRUE LIMIT 5000")
     rows = cursor.fetchall()
 
     excluded = []
@@ -423,11 +421,13 @@ def list_excluded_foods(
         desc_lower = description.lower() if description else ""
         for kw in exclude_keywords:
             if kw in desc_lower:
-                excluded.append({
-                    "fdc_id": fdc_id,
-                    "description": description,
-                    "excluded_by": kw,
-                })
+                excluded.append(
+                    {
+                        "fdc_id": fdc_id,
+                        "description": description,
+                        "excluded_by": kw,
+                    }
+                )
                 break
         if len(excluded) >= limit:
             break

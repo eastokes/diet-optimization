@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from llmn.optimizer.models import NutrientConstraint
 
@@ -52,8 +51,8 @@ class MealNutrientConstraint:
 
     meal: MealType
     nutrient_id: int
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
+    min_value: float | None = None
+    max_value: float | None = None
 
     def __post_init__(self) -> None:
         if self.min_value is None and self.max_value is None:
@@ -112,7 +111,7 @@ class MealConfig:
     """
 
     meal_type: MealType
-    calorie_target: Optional[MealCalorieTarget] = None
+    calorie_target: MealCalorieTarget | None = None
     nutrient_constraints: list[MealNutrientConstraint] = field(default_factory=list)
     typical_portion: float = 100.0  # Target grams for deviation penalty
 
@@ -160,7 +159,7 @@ class MultiPeriodRequest:
     lambda_deviation: float = 0.001
 
     # Explicit food pool (bypasses tag filtering when set)
-    explicit_food_ids: Optional[list[int]] = None
+    explicit_food_ids: list[int] | None = None
 
 
 @dataclass
@@ -211,7 +210,7 @@ class MultiPeriodResult:
     meals: list[MealResult]
     daily_totals: dict[str, float]  # calories, protein, carbs, fat, cost
     solver_info: dict  # elapsed_seconds, n_vars, n_meals, etc.
-    infeasibility_diagnosis: Optional[InfeasibilityDiagnosis] = None
+    infeasibility_diagnosis: InfeasibilityDiagnosis | None = None
 
 
 def derive_default_meal_configs(

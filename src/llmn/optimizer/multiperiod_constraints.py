@@ -12,14 +12,13 @@ from __future__ import annotations
 
 import random
 import sqlite3
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from scipy.sparse import csc_matrix, lil_matrix
 
 from llmn.data.quality import detect_incomplete_foods, format_quality_warnings
 from llmn.optimizer.multiperiod_models import (
-    MealConfig,
     MealType,
     MultiPeriodRequest,
     derive_default_meal_configs,
@@ -308,9 +307,7 @@ class MultiPeriodConstraintBuilder:
             query = f"SELECT fdc_id, description FROM foods WHERE fdc_id IN ({placeholders})"
             cursor = self.conn.execute(query, self._food_ids)
             desc_map = {row[0]: row[1] for row in cursor.fetchall()}
-            self._food_descriptions = [
-                desc_map.get(fid, f"Food {fid}") for fid in self._food_ids
-            ]
+            self._food_descriptions = [desc_map.get(fid, f"Food {fid}") for fid in self._food_ids]
         else:
             self._food_descriptions = []
 
@@ -470,18 +467,14 @@ class MultiPeriodConstraintBuilder:
                     for i in range(self._n_foods):
                         var_idx = self.var_index(i, m)
                         row[var_idx] = -self._nutrient_matrix[i, n_idx]
-                    rows.append(
-                        (row, -mnc.min_value, f"{meal_name}_n{mnc.nutrient_id}_min")
-                    )
+                    rows.append((row, -mnc.min_value, f"{meal_name}_n{mnc.nutrient_id}_min"))
 
                 if mnc.max_value is not None:
                     row = np.zeros(self._n_vars)
                     for i in range(self._n_foods):
                         var_idx = self.var_index(i, m)
                         row[var_idx] = self._nutrient_matrix[i, n_idx]
-                    rows.append(
-                        (row, mnc.max_value, f"{meal_name}_n{mnc.nutrient_id}_max")
-                    )
+                    rows.append((row, mnc.max_value, f"{meal_name}_n{mnc.nutrient_id}_max"))
 
         # 3. Daily linking constraints (sum over all meals)
         # Calories
@@ -538,9 +531,7 @@ class MultiPeriodConstraintBuilder:
                 e = self._nutrient_matrix[i, cal_idx]
                 row[self.var_index(i, m_a)] = e
                 row[self.var_index(i, m_b)] = -e
-            rows.append(
-                (row, eq.tolerance, f"equical_{eq.meal_a.value}_{eq.meal_b.value}_pos")
-            )
+            rows.append((row, eq.tolerance, f"equical_{eq.meal_a.value}_{eq.meal_b.value}_pos"))
 
             # -(cal_a - cal_b) <= tolerance  =>  cal_b - cal_a <= tolerance
             row = np.zeros(self._n_vars)
@@ -548,9 +539,7 @@ class MultiPeriodConstraintBuilder:
                 e = self._nutrient_matrix[i, cal_idx]
                 row[self.var_index(i, m_a)] = -e
                 row[self.var_index(i, m_b)] = e
-            rows.append(
-                (row, eq.tolerance, f"equical_{eq.meal_a.value}_{eq.meal_b.value}_neg")
-            )
+            rows.append((row, eq.tolerance, f"equical_{eq.meal_a.value}_{eq.meal_b.value}_neg"))
 
         # Build sparse matrix
         if not rows:
@@ -597,7 +586,7 @@ class MultiPeriodConstraintBuilder:
 
         return ub
 
-    def get_nutrient_index(self, nutrient_id: int) -> Optional[int]:
+    def get_nutrient_index(self, nutrient_id: int) -> int | None:
         """Get the index of a nutrient in the nutrient matrix.
 
         Args:

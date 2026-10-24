@@ -6,10 +6,9 @@ food pools in a single call, then comparing results to find the best option.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from llmn.optimizer.models import NutrientConstraint, OptimizationRequest
 from llmn.optimizer.solver import solve_diet_problem
@@ -44,9 +43,9 @@ class BatchResult:
     pool_name: str
     status: str  # "optimal", "infeasible", "error"
     success: bool
-    run_id: Optional[int] = None
-    summary: Optional[dict[str, Any]] = None  # calories, protein, cost, food_count
-    diagnosis: Optional[str] = None  # If infeasible
+    run_id: int | None = None
+    summary: dict[str, Any] | None = None  # calories, protein, cost, food_count
+    diagnosis: str | None = None  # If infeasible
 
 
 def run_batch_optimization(
@@ -84,12 +83,8 @@ def run_batch_optimization(
         # Build batch result
         if opt_result.success:
             # Extract summary
-            total_calories = sum(
-                n.amount for n in opt_result.nutrients if n.nutrient_id == 1008
-            )
-            total_protein = sum(
-                n.amount for n in opt_result.nutrients if n.nutrient_id == 1003
-            )
+            total_calories = sum(n.amount for n in opt_result.nutrients if n.nutrient_id == 1008)
+            total_protein = sum(n.amount for n in opt_result.nutrients if n.nutrient_id == 1003)
 
             summary = {
                 "total_calories": round(total_calories, 0),
@@ -152,14 +147,16 @@ def compare_batch_results(results: list[BatchResult]) -> dict[str, Any]:
     # Generate pairwise comparisons
     comparison = {}
     for i, r1 in enumerate(successful):
-        for r2 in successful[i + 1:]:
+        for r2 in successful[i + 1 :]:
             key = f"{r1.pool_name}_vs_{r2.pool_name}"
             s1 = r1.summary or {}
             s2 = r2.summary or {}
 
             comparison[key] = {
-                "calories_diff": (s1.get("total_calories", 0) or 0) - (s2.get("total_calories", 0) or 0),
-                "protein_diff": (s1.get("total_protein", 0) or 0) - (s2.get("total_protein", 0) or 0),
+                "calories_diff": (s1.get("total_calories", 0) or 0)
+                - (s2.get("total_calories", 0) or 0),
+                "protein_diff": (s1.get("total_protein", 0) or 0)
+                - (s2.get("total_protein", 0) or 0),
                 "cost_diff": (s1.get("total_cost") or 0) - (s2.get("total_cost") or 0),
             }
 
@@ -265,12 +262,16 @@ def format_batch_response(
                 "pool": r.pool_name,
                 "status": r.status,
                 "success": r.success,
-                **({
-                    "total_calories": r.summary.get("total_calories"),
-                    "protein": r.summary.get("total_protein"),
-                    "cost": r.summary.get("total_cost"),
-                    "food_count": r.summary.get("food_count"),
-                } if r.summary else {}),
+                **(
+                    {
+                        "total_calories": r.summary.get("total_calories"),
+                        "protein": r.summary.get("total_protein"),
+                        "cost": r.summary.get("total_cost"),
+                        "food_count": r.summary.get("food_count"),
+                    }
+                    if r.summary
+                    else {}
+                ),
                 **({"diagnosis": r.diagnosis} if r.diagnosis else {}),
             }
             for r in results

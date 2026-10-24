@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -23,13 +22,13 @@ class MacroTargets:
     Values are percentages of total calories (0.0 to 1.0 range).
     """
 
-    fat_min: Optional[float] = None
-    fat_max: Optional[float] = None
-    carb_min: Optional[float] = None
-    carb_max: Optional[float] = None
-    protein_min: Optional[float] = None
-    protein_max: Optional[float] = None
-    carb_grams_max: Optional[float] = None  # For keto-style absolute limits
+    fat_min: float | None = None
+    fat_max: float | None = None
+    carb_min: float | None = None
+    carb_max: float | None = None
+    protein_min: float | None = None
+    protein_max: float | None = None
+    carb_grams_max: float | None = None  # For keto-style absolute limits
 
 
 @dataclass
@@ -56,75 +55,237 @@ class DietaryPattern:
     include_categories: list[str] = field(default_factory=list)
     exclude_categories: list[str] = field(default_factory=list)
     required_categories: list[str] = field(default_factory=list)
-    macro_targets: Optional[MacroTargets] = None
+    macro_targets: MacroTargets | None = None
     emphasize_keywords: list[str] = field(default_factory=list)
     limit_keywords: list[str] = field(default_factory=list)
 
 
 # Common exclusion keyword sets for reuse
 MEAT_KEYWORDS = [
-    "beef", "pork", "chicken", "turkey", "lamb", "veal", "duck", "goose",
-    "bacon", "ham", "sausage", "hot dog", "frankfurter", "pepperoni",
-    "salami", "prosciutto", "chorizo", "deli meat", "bologna", "pastrami",
-    "roast beef", "ground beef", "ground pork", "ground turkey",
-    "ground chicken", "steak", "rib", "brisket", "tenderloin",
-    "venison", "bison", "game", "rabbit", "goat",
+    "beef",
+    "pork",
+    "chicken",
+    "turkey",
+    "lamb",
+    "veal",
+    "duck",
+    "goose",
+    "bacon",
+    "ham",
+    "sausage",
+    "hot dog",
+    "frankfurter",
+    "pepperoni",
+    "salami",
+    "prosciutto",
+    "chorizo",
+    "deli meat",
+    "bologna",
+    "pastrami",
+    "roast beef",
+    "ground beef",
+    "ground pork",
+    "ground turkey",
+    "ground chicken",
+    "steak",
+    "rib",
+    "brisket",
+    "tenderloin",
+    "venison",
+    "bison",
+    "game",
+    "rabbit",
+    "goat",
 ]
 
 FISH_KEYWORDS = [
-    "fish", "salmon", "tuna", "cod", "tilapia", "halibut", "sardine",
-    "anchovy", "mackerel", "trout", "bass", "haddock", "herring",
-    "shrimp", "crab", "lobster", "clam", "mussel", "oyster", "scallop",
-    "squid", "calamari", "octopus", "seafood", "caviar", "roe",
+    "fish",
+    "salmon",
+    "tuna",
+    "cod",
+    "tilapia",
+    "halibut",
+    "sardine",
+    "anchovy",
+    "mackerel",
+    "trout",
+    "bass",
+    "haddock",
+    "herring",
+    "shrimp",
+    "crab",
+    "lobster",
+    "clam",
+    "mussel",
+    "oyster",
+    "scallop",
+    "squid",
+    "calamari",
+    "octopus",
+    "seafood",
+    "caviar",
+    "roe",
 ]
 
 DAIRY_KEYWORDS = [
-    "milk", "cheese", "yogurt", "cream", "butter", "whey", "casein",
-    "cottage cheese", "ricotta", "mozzarella", "cheddar", "parmesan",
-    "sour cream", "cream cheese", "ice cream", "gelato",
+    "milk",
+    "cheese",
+    "yogurt",
+    "cream",
+    "butter",
+    "whey",
+    "casein",
+    "cottage cheese",
+    "ricotta",
+    "mozzarella",
+    "cheddar",
+    "parmesan",
+    "sour cream",
+    "cream cheese",
+    "ice cream",
+    "gelato",
 ]
 
 EGG_KEYWORDS = [
-    "egg", "omelette", "omelet", "scrambled egg", "fried egg",
+    "egg",
+    "omelette",
+    "omelet",
+    "scrambled egg",
+    "fried egg",
 ]
 
 REFINED_CARB_KEYWORDS = [
-    "bread", "pasta", "rice", "noodle", "cracker", "cereal",
-    "bagel", "muffin", "croissant", "pastry", "cookie", "cake",
-    "pie", "donut", "doughnut", "pancake", "waffle", "tortilla",
-    "white flour", "wheat flour", "refined flour",
+    "bread",
+    "pasta",
+    "rice",
+    "noodle",
+    "cracker",
+    "cereal",
+    "bagel",
+    "muffin",
+    "croissant",
+    "pastry",
+    "cookie",
+    "cake",
+    "pie",
+    "donut",
+    "doughnut",
+    "pancake",
+    "waffle",
+    "tortilla",
+    "white flour",
+    "wheat flour",
+    "refined flour",
 ]
 
 SUGAR_KEYWORDS = [
-    "sugar", "syrup", "honey", "molasses", "candy", "chocolate",
-    "soda", "cola", "sweetened", "dessert", "frosting", "icing",
-    "ice cream", "gelato", "sorbet", "jam", "jelly", "marmalade",
+    "sugar",
+    "syrup",
+    "honey",
+    "molasses",
+    "candy",
+    "chocolate",
+    "soda",
+    "cola",
+    "sweetened",
+    "dessert",
+    "frosting",
+    "icing",
+    "ice cream",
+    "gelato",
+    "sorbet",
+    "jam",
+    "jelly",
+    "marmalade",
 ]
 
 FRUIT_KEYWORDS = [
-    "apple", "banana", "orange", "grape", "berry", "strawberry",
-    "blueberry", "raspberry", "blackberry", "mango", "pineapple",
-    "peach", "pear", "plum", "cherry", "melon", "watermelon",
-    "cantaloupe", "honeydew", "kiwi", "papaya", "guava",
+    "apple",
+    "banana",
+    "orange",
+    "grape",
+    "berry",
+    "strawberry",
+    "blueberry",
+    "raspberry",
+    "blackberry",
+    "mango",
+    "pineapple",
+    "peach",
+    "pear",
+    "plum",
+    "cherry",
+    "melon",
+    "watermelon",
+    "cantaloupe",
+    "honeydew",
+    "kiwi",
+    "papaya",
+    "guava",
 ]
 
 LEGUME_KEYWORDS = [
-    "bean", "lentil", "chickpea", "pea", "hummus", "pinto",
-    "black bean", "kidney", "navy bean", "lima", "edamame",
-    "soybean", "tofu", "tempeh", "dal", "fava",
+    "bean",
+    "lentil",
+    "chickpea",
+    "pea",
+    "hummus",
+    "pinto",
+    "black bean",
+    "kidney",
+    "navy bean",
+    "lima",
+    "edamame",
+    "soybean",
+    "tofu",
+    "tempeh",
+    "dal",
+    "fava",
 ]
 
 VEGETABLE_KEYWORDS = [
-    "spinach", "kale", "broccoli", "cauliflower", "lettuce", "cabbage",
-    "carrot", "celery", "cucumber", "pepper", "tomato", "onion",
-    "garlic", "asparagus", "zucchini", "squash", "eggplant", "mushroom",
-    "artichoke", "beet", "radish", "turnip", "chard", "collard",
-    "arugula", "brussels sprout", "bok choy", "fennel",
+    "spinach",
+    "kale",
+    "broccoli",
+    "cauliflower",
+    "lettuce",
+    "cabbage",
+    "carrot",
+    "celery",
+    "cucumber",
+    "pepper",
+    "tomato",
+    "onion",
+    "garlic",
+    "asparagus",
+    "zucchini",
+    "squash",
+    "eggplant",
+    "mushroom",
+    "artichoke",
+    "beet",
+    "radish",
+    "turnip",
+    "chard",
+    "collard",
+    "arugula",
+    "brussels sprout",
+    "bok choy",
+    "fennel",
 ]
 
 NUT_KEYWORDS = [
-    "almond", "walnut", "cashew", "peanut", "pecan", "pistachio",
-    "macadamia", "hazelnut", "brazil nut", "pine nut", "nut butter",
+    "almond",
+    "walnut",
+    "cashew",
+    "peanut",
+    "pecan",
+    "pistachio",
+    "macadamia",
+    "hazelnut",
+    "brazil nut",
+    "pine nut",
+    "nut butter",
 ]
 
 
@@ -135,9 +296,22 @@ NUT_KEYWORDS = [
 PESCATARIAN = DietaryPattern(
     name="pescatarian",
     description="Fish and seafood plus vegetarian foods (no other meat)",
-    include_keywords=FISH_KEYWORDS + EGG_KEYWORDS + DAIRY_KEYWORDS + LEGUME_KEYWORDS + VEGETABLE_KEYWORDS,
+    include_keywords=FISH_KEYWORDS
+    + EGG_KEYWORDS
+    + DAIRY_KEYWORDS
+    + LEGUME_KEYWORDS
+    + VEGETABLE_KEYWORDS,
     exclude_keywords=MEAT_KEYWORDS,
-    include_categories=["fish", "seafood", "eggs", "dairy", "legumes", "vegetables", "grains", "nuts"],
+    include_categories=[
+        "fish",
+        "seafood",
+        "eggs",
+        "dairy",
+        "legumes",
+        "vegetables",
+        "grains",
+        "nuts",
+    ],
 )
 
 VEGETARIAN = DietaryPattern(
@@ -152,17 +326,37 @@ VEGAN = DietaryPattern(
     name="vegan",
     description="Plant-based only, no animal products",
     include_keywords=LEGUME_KEYWORDS + VEGETABLE_KEYWORDS + NUT_KEYWORDS,
-    exclude_keywords=MEAT_KEYWORDS + FISH_KEYWORDS + DAIRY_KEYWORDS + EGG_KEYWORDS + ["honey", "gelatin"],
+    exclude_keywords=MEAT_KEYWORDS
+    + FISH_KEYWORDS
+    + DAIRY_KEYWORDS
+    + EGG_KEYWORDS
+    + ["honey", "gelatin"],
     include_categories=["legumes", "vegetables", "grains", "fruits", "nuts"],
 )
 
 KETO = DietaryPattern(
     name="keto",
     description="Very low carbohydrate, high fat diet",
-    exclude_keywords=REFINED_CARB_KEYWORDS + SUGAR_KEYWORDS + FRUIT_KEYWORDS + [
-        "potato", "corn", "bean", "lentil", "chickpea",  # High-carb foods
+    exclude_keywords=REFINED_CARB_KEYWORDS
+    + SUGAR_KEYWORDS
+    + FRUIT_KEYWORDS
+    + [
+        "potato",
+        "corn",
+        "bean",
+        "lentil",
+        "chickpea",  # High-carb foods
     ],
-    emphasize_keywords=["olive oil", "avocado", "coconut", "butter", "cheese", "egg", "fish", "meat"],
+    emphasize_keywords=[
+        "olive oil",
+        "avocado",
+        "coconut",
+        "butter",
+        "cheese",
+        "egg",
+        "fish",
+        "meat",
+    ],
     macro_targets=MacroTargets(
         fat_min=0.65,
         fat_max=0.80,
@@ -176,9 +370,20 @@ KETO = DietaryPattern(
 SLOW_CARB = DietaryPattern(
     name="slow_carb",
     description="Tim Ferriss 4-Hour Body style: protein, legumes, vegetables only",
-    include_keywords=LEGUME_KEYWORDS + VEGETABLE_KEYWORDS + MEAT_KEYWORDS + FISH_KEYWORDS + EGG_KEYWORDS,
-    exclude_keywords=REFINED_CARB_KEYWORDS + SUGAR_KEYWORDS + FRUIT_KEYWORDS + DAIRY_KEYWORDS + [
-        "potato", "sweet potato", "corn", "white rice",
+    include_keywords=LEGUME_KEYWORDS
+    + VEGETABLE_KEYWORDS
+    + MEAT_KEYWORDS
+    + FISH_KEYWORDS
+    + EGG_KEYWORDS,
+    exclude_keywords=REFINED_CARB_KEYWORDS
+    + SUGAR_KEYWORDS
+    + FRUIT_KEYWORDS
+    + DAIRY_KEYWORDS
+    + [
+        "potato",
+        "sweet potato",
+        "corn",
+        "white rice",
     ],
     required_categories=["legumes"],  # Must have legumes at each meal
     emphasize_keywords=["lentil", "black bean", "pinto bean", "spinach", "broccoli"],
@@ -188,12 +393,30 @@ MEDITERRANEAN = DietaryPattern(
     name="mediterranean",
     description="Traditional Mediterranean diet: fish, olive oil, vegetables, whole grains",
     emphasize_keywords=[
-        "olive oil", "fish", "salmon", "sardine", "legume", "bean", "lentil",
-        "nut", "almond", "walnut", "tomato", "leafy green", "whole grain",
+        "olive oil",
+        "fish",
+        "salmon",
+        "sardine",
+        "legume",
+        "bean",
+        "lentil",
+        "nut",
+        "almond",
+        "walnut",
+        "tomato",
+        "leafy green",
+        "whole grain",
     ],
     limit_keywords=[
-        "red meat", "beef", "pork", "processed", "sausage", "bacon",
-        "sugar", "sweetened", "refined",
+        "red meat",
+        "beef",
+        "pork",
+        "processed",
+        "sausage",
+        "bacon",
+        "sugar",
+        "sweetened",
+        "refined",
     ],
     include_categories=["fish", "seafood", "legumes", "vegetables", "fruits", "nuts", "grains"],
 )
@@ -201,18 +424,45 @@ MEDITERRANEAN = DietaryPattern(
 PALEO = DietaryPattern(
     name="paleo",
     description="Paleolithic-style: meat, fish, vegetables, fruits, nuts (no grains/legumes/dairy)",
-    include_keywords=MEAT_KEYWORDS + FISH_KEYWORDS + VEGETABLE_KEYWORDS + FRUIT_KEYWORDS + NUT_KEYWORDS,
-    exclude_keywords=REFINED_CARB_KEYWORDS + SUGAR_KEYWORDS + DAIRY_KEYWORDS + LEGUME_KEYWORDS + [
-        "grain", "wheat", "oat", "corn", "rice", "quinoa", "barley",
+    include_keywords=MEAT_KEYWORDS
+    + FISH_KEYWORDS
+    + VEGETABLE_KEYWORDS
+    + FRUIT_KEYWORDS
+    + NUT_KEYWORDS,
+    exclude_keywords=REFINED_CARB_KEYWORDS
+    + SUGAR_KEYWORDS
+    + DAIRY_KEYWORDS
+    + LEGUME_KEYWORDS
+    + [
+        "grain",
+        "wheat",
+        "oat",
+        "corn",
+        "rice",
+        "quinoa",
+        "barley",
     ],
 )
 
 WHOLE30 = DietaryPattern(
     name="whole30",
     description="Whole foods only: no sugar, alcohol, grains, legumes, dairy",
-    include_keywords=MEAT_KEYWORDS + FISH_KEYWORDS + VEGETABLE_KEYWORDS + FRUIT_KEYWORDS + NUT_KEYWORDS,
-    exclude_keywords=SUGAR_KEYWORDS + DAIRY_KEYWORDS + LEGUME_KEYWORDS + REFINED_CARB_KEYWORDS + [
-        "alcohol", "wine", "beer", "liquor", "soy", "peanut",
+    include_keywords=MEAT_KEYWORDS
+    + FISH_KEYWORDS
+    + VEGETABLE_KEYWORDS
+    + FRUIT_KEYWORDS
+    + NUT_KEYWORDS,
+    exclude_keywords=SUGAR_KEYWORDS
+    + DAIRY_KEYWORDS
+    + LEGUME_KEYWORDS
+    + REFINED_CARB_KEYWORDS
+    + [
+        "alcohol",
+        "wine",
+        "beer",
+        "liquor",
+        "soy",
+        "peanut",
     ],
 )
 
@@ -233,7 +483,7 @@ DIETARY_PATTERNS: dict[str, DietaryPattern] = {
 }
 
 
-def get_pattern(name: str) -> Optional[DietaryPattern]:
+def get_pattern(name: str) -> DietaryPattern | None:
     """Get a dietary pattern by name.
 
     Args:
@@ -253,10 +503,7 @@ def list_patterns() -> list[dict]:
     Returns:
         List of pattern info dicts with name and description
     """
-    return [
-        {"name": p.name, "description": p.description}
-        for p in DIETARY_PATTERNS.values()
-    ]
+    return [{"name": p.name, "description": p.description} for p in DIETARY_PATTERNS.values()]
 
 
 def combine_patterns(*pattern_names: str) -> DietaryPattern:

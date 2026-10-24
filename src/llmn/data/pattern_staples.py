@@ -124,7 +124,7 @@ LEGUME_STAPLES = [
 LEAFY_GREENS = [
     168462,  # Spinach, raw
     170530,  # Spinach, cooked, boiled, drained, with salt
-    1999632, # Spinach, baby
+    1999632,  # Spinach, baby
     168421,  # Kale, raw
     169238,  # Kale, cooked, boiled, drained, without salt
     169247,  # Lettuce, cos or romaine, raw
@@ -141,7 +141,7 @@ CRUCIFEROUS = [
     170397,  # Cauliflower, cooked, boiled, drained, without salt
     170383,  # Brussels sprouts, raw
     169971,  # Brussels sprouts, cooked, boiled, drained, without salt
-    2346407, # Cabbage, green, raw
+    2346407,  # Cabbage, green, raw
     169976,  # Cabbage, cooked, boiled, drained, without salt
     170390,  # Cabbage, chinese (pak-choi), raw
 ]
@@ -161,8 +161,8 @@ OTHER_VEGETABLES = [
     169988,  # Celery, raw
     168409,  # Cucumber, with peel, raw
     170457,  # Tomatoes, red, ripe, raw, year round average
-    2258588, # Peppers, bell, green, raw
-    2258590, # Peppers, bell, red, raw
+    2258588,  # Peppers, bell, green, raw
+    2258590,  # Peppers, bell, red, raw
     169228,  # Eggplant, raw
     169229,  # Eggplant, cooked, boiled, drained, without salt
 ]
@@ -170,7 +170,7 @@ OTHER_VEGETABLES = [
 # Mushrooms
 MUSHROOMS = [
     168434,  # Mushrooms, brown, italian, or crimini, raw
-    2003598, # Mushroom, portabella
+    2003598,  # Mushroom, portabella
     169376,  # Mushroom, white, exposed to ultraviolet light, raw
 ]
 
@@ -195,7 +195,7 @@ NUT_STAPLES = [
     170563,  # Seeds, sunflower seed kernels, dry roasted, without salt
     170554,  # Seeds, chia seeds, dried
     169414,  # Seeds, flaxseed
-    2515380, # Seeds, pumpkin seeds (pepitas), raw
+    2515380,  # Seeds, pumpkin seeds (pepitas), raw
 ]
 
 # Common dairy
@@ -273,49 +273,50 @@ STARCHY_STAPLES = [
 # =============================================================================
 
 PESCATARIAN_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    LEGUME_STAPLES +
-    VEGETABLE_STAPLES +
-    NUT_STAPLES +
-    DAIRY_STAPLES +
-    FAT_STAPLES +
-    PLANT_PROTEIN_STAPLES +
-    GRAIN_STAPLES +
-    FRUIT_STAPLES
+    FISH_STAPLES
+    + EGG_STAPLES
+    + LEGUME_STAPLES
+    + VEGETABLE_STAPLES
+    + NUT_STAPLES
+    + DAIRY_STAPLES
+    + FAT_STAPLES
+    + PLANT_PROTEIN_STAPLES
+    + GRAIN_STAPLES
+    + FRUIT_STAPLES
 )
 
 VEGETARIAN_STAPLES = (
-    EGG_STAPLES +
-    LEGUME_STAPLES +
-    VEGETABLE_STAPLES +
-    NUT_STAPLES +
-    DAIRY_STAPLES +
-    FAT_STAPLES +
-    PLANT_PROTEIN_STAPLES +
-    GRAIN_STAPLES +
-    FRUIT_STAPLES
+    EGG_STAPLES
+    + LEGUME_STAPLES
+    + VEGETABLE_STAPLES
+    + NUT_STAPLES
+    + DAIRY_STAPLES
+    + FAT_STAPLES
+    + PLANT_PROTEIN_STAPLES
+    + GRAIN_STAPLES
+    + FRUIT_STAPLES
 )
 
 VEGAN_STAPLES = (
-    LEGUME_STAPLES +
-    VEGETABLE_STAPLES +
-    NUT_STAPLES +
-    [171412, 748608, 173573, 171705, 171706] +  # Oils and avocado (no butter)
-    PLANT_PROTEIN_STAPLES +
-    GRAIN_STAPLES +
-    FRUIT_STAPLES
+    LEGUME_STAPLES
+    + VEGETABLE_STAPLES
+    + NUT_STAPLES
+    + [171412, 748608, 173573, 171705, 171706]  # Oils and avocado (no butter)
+    + PLANT_PROTEIN_STAPLES
+    + GRAIN_STAPLES
+    + FRUIT_STAPLES
 )
 
 # Keto: high fat, very low carb, moderate protein
 KETO_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    CHICKEN_STAPLES +
-    BEEF_STAPLES +
-    PORK_STAPLES +
-    TURKEY_STAPLES +
-    LAMB_STAPLES +
+    FISH_STAPLES
+    + EGG_STAPLES
+    + CHICKEN_STAPLES
+    + BEEF_STAPLES
+    + PORK_STAPLES
+    + TURKEY_STAPLES
+    + LAMB_STAPLES
+    +
     # Only low-carb vegetables
     [
         168462,  # Spinach, raw
@@ -325,81 +326,82 @@ KETO_STAPLES = (
         170379,  # Broccoli, raw
         169986,  # Cauliflower, raw
         170383,  # Brussels sprouts, raw
-        2346407, # Cabbage, raw
+        2346407,  # Cabbage, raw
         168389,  # Asparagus, raw
         169291,  # Zucchini, raw
         168409,  # Cucumber, raw
         168434,  # Mushrooms, crimini
-        2003598, # Mushroom, portabella
-        2258588, # Bell peppers, green
-    ] +
-    NUT_STAPLES +
-    DAIRY_STAPLES +
-    FAT_STAPLES
+        2003598,  # Mushroom, portabella
+        2258588,  # Bell peppers, green
+    ]
+    + NUT_STAPLES
+    + DAIRY_STAPLES
+    + FAT_STAPLES
     # No grains, legumes, or fruits (except small berries occasionally)
 )
 
 # Slow carb (Tim Ferriss): legumes allowed, no grains/fruits/dairy
 SLOW_CARB_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    CHICKEN_STAPLES +
-    BEEF_STAPLES +
-    PORK_STAPLES +
-    TURKEY_STAPLES +
-    LEGUME_STAPLES +
-    VEGETABLE_STAPLES +
-    [171413, 748608, 171412, 173573, 171705, 171706]  # Oils and avocado only
+    FISH_STAPLES
+    + EGG_STAPLES
+    + CHICKEN_STAPLES
+    + BEEF_STAPLES
+    + PORK_STAPLES
+    + TURKEY_STAPLES
+    + LEGUME_STAPLES
+    + VEGETABLE_STAPLES
+    + [171413, 748608, 171412, 173573, 171705, 171706]  # Oils and avocado only
     # No grains, no fruits, no dairy (except cottage cheese)
 )
 
 # Mediterranean: fish, olive oil, legumes, whole grains, vegetables, fruit, nuts
 MEDITERRANEAN_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    CHICKEN_STAPLES +  # Moderate poultry
-    LEGUME_STAPLES +
-    VEGETABLE_STAPLES +
-    NUT_STAPLES +
-    [  # Olive oil focused, limited dairy (mainly yogurt/cheese)
+    FISH_STAPLES
+    + EGG_STAPLES
+    + CHICKEN_STAPLES  # Moderate poultry
+    + LEGUME_STAPLES
+    + VEGETABLE_STAPLES
+    + NUT_STAPLES
+    + [  # Olive oil focused, limited dairy (mainly yogurt/cheese)
         171413,  # Oil, olive, salad or cooking
         748608,  # Oil, olive, extra virgin
         171705,  # Avocados, raw
         170894,  # Yogurt, Greek, plain, nonfat
         171304,  # Yogurt, Greek, plain, whole milk
         328637,  # Cheese, cheddar (moderate)
-    ] +
-    GRAIN_STAPLES +
-    FRUIT_STAPLES
+    ]
+    + GRAIN_STAPLES
+    + FRUIT_STAPLES
 )
 
 # Paleo: meat, fish, eggs, vegetables, fruit, nuts; no grains/legumes/dairy
 PALEO_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    CHICKEN_STAPLES +
-    BEEF_STAPLES +
-    PORK_STAPLES +
-    TURKEY_STAPLES +
-    LAMB_STAPLES +
-    VEGETABLE_STAPLES +
-    NUT_STAPLES +
-    [171413, 748608, 171412, 173573, 171705, 171706] +  # Oils and avocado
-    FRUIT_STAPLES +
-    STARCHY_STAPLES  # Sweet potatoes, potatoes allowed in some paleo variants
+    FISH_STAPLES
+    + EGG_STAPLES
+    + CHICKEN_STAPLES
+    + BEEF_STAPLES
+    + PORK_STAPLES
+    + TURKEY_STAPLES
+    + LAMB_STAPLES
+    + VEGETABLE_STAPLES
+    + NUT_STAPLES
+    + [171413, 748608, 171412, 173573, 171705, 171706]  # Oils and avocado
+    + FRUIT_STAPLES
+    + STARCHY_STAPLES  # Sweet potatoes, potatoes allowed in some paleo variants
     # No grains, no legumes, no dairy
 )
 
 # Whole30: like paleo but stricter (no sugar, alcohol, grains, legumes, dairy)
 WHOLE30_STAPLES = (
-    FISH_STAPLES +
-    EGG_STAPLES +
-    CHICKEN_STAPLES +
-    BEEF_STAPLES +
-    PORK_STAPLES +
-    TURKEY_STAPLES +
-    LAMB_STAPLES +
-    VEGETABLE_STAPLES +
+    FISH_STAPLES
+    + EGG_STAPLES
+    + CHICKEN_STAPLES
+    + BEEF_STAPLES
+    + PORK_STAPLES
+    + TURKEY_STAPLES
+    + LAMB_STAPLES
+    + VEGETABLE_STAPLES
+    +
     # Nuts allowed but no peanuts (they're legumes)
     [
         170567,  # Almonds
@@ -412,11 +414,11 @@ WHOLE30_STAPLES = (
         170562,  # Sunflower seeds
         170554,  # Chia seeds
         169414,  # Flaxseed
-        2515380, # Pumpkin seeds
-    ] +
-    [171413, 748608, 171412, 173573, 171705, 171706] +  # Oils and avocado
-    FRUIT_STAPLES +
-    STARCHY_STAPLES
+        2515380,  # Pumpkin seeds
+    ]
+    + [171413, 748608, 171412, 173573, 171705, 171706]  # Oils and avocado
+    + FRUIT_STAPLES
+    + STARCHY_STAPLES
     # No grains, no legumes, no dairy, no peanuts
 )
 

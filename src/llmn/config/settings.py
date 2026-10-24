@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
@@ -30,10 +29,8 @@ class DatabaseConfig:
 class USDAConfig:
     """USDA data configuration."""
 
-    data_path: Optional[Path] = None
-    data_types: list[str] = field(
-        default_factory=lambda: ["foundation_food", "sr_legacy_food"]
-    )
+    data_path: Path | None = None
+    data_types: list[str] = field(default_factory=lambda: ["foundation_food", "sr_legacy_food"])
 
 
 @dataclass
@@ -65,7 +62,7 @@ class Settings:
     defaults: DefaultsConfig = field(default_factory=DefaultsConfig)
 
     @classmethod
-    def load(cls, config_path: Optional[Path] = None) -> "Settings":
+    def load(cls, config_path: Path | None = None) -> Settings:
         """Load settings from YAML file or return defaults.
 
         Args:
@@ -105,19 +102,13 @@ class Settings:
             if "solver" in opt_data:
                 settings.optimization.solver = opt_data["solver"]
             if "use_quadratic_penalty" in opt_data:
-                settings.optimization.use_quadratic_penalty = opt_data[
-                    "use_quadratic_penalty"
-                ]
+                settings.optimization.use_quadratic_penalty = opt_data["use_quadratic_penalty"]
             if "lambda_cost" in opt_data:
                 settings.optimization.lambda_cost = float(opt_data["lambda_cost"])
             if "lambda_deviation" in opt_data:
-                settings.optimization.lambda_deviation = float(
-                    opt_data["lambda_deviation"]
-                )
+                settings.optimization.lambda_deviation = float(opt_data["lambda_deviation"])
             if "max_grams_per_food" in opt_data:
-                settings.optimization.max_grams_per_food = float(
-                    opt_data["max_grams_per_food"]
-                )
+                settings.optimization.max_grams_per_food = float(opt_data["max_grams_per_food"])
 
         # Parse defaults
         if "defaults" in data:
@@ -129,7 +120,7 @@ class Settings:
 
         return settings
 
-    def save(self, config_path: Optional[Path] = None) -> None:
+    def save(self, config_path: Path | None = None) -> None:
         """Save current settings to YAML file.
 
         Args:
@@ -166,7 +157,7 @@ class Settings:
 
 
 # Global settings instance (lazy loaded)
-_settings: Optional[Settings] = None
+_settings: Settings | None = None
 
 
 def get_settings() -> Settings:

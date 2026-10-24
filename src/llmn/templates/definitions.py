@@ -15,10 +15,10 @@ from llmn.templates.models import (
     SlotDefinition,
 )
 
-
 # =============================================================================
 # Slot Definitions (reusable building blocks)
 # =============================================================================
+
 
 def _protein_slot(sources: list[str], target: float = 150) -> SlotDefinition:
     """Create a protein slot with given sources."""
@@ -42,7 +42,9 @@ def _legume_slot(target: float = 125) -> SlotDefinition:
     )
 
 
-def _vegetable_slot(sources: list[str] | None = None, target: float = 125, count: int = 1) -> SlotDefinition:
+def _vegetable_slot(
+    sources: list[str] | None = None, target: float = 125, count: int = 1
+) -> SlotDefinition:
     """Create a vegetable slot."""
     return SlotDefinition(
         name="vegetable",

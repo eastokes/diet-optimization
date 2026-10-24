@@ -7,7 +7,7 @@ can use to understand how to construct valid optimization requests.
 from __future__ import annotations
 
 from sqlite3 import Connection
-from typing import Any, Optional
+from typing import Any
 
 from llmn.data.nutrient_ids import (
     MACRO_NUTRIENT_IDS,
@@ -18,7 +18,6 @@ from llmn.data.nutrient_ids import (
     VITAMIN_NUTRIENT_IDS,
 )
 from llmn.db.queries import TagQueries
-
 
 # Typical recommended ranges for nutrients (for LLM guidance)
 NUTRIENT_TYPICAL_RANGES: dict[str, tuple[float, float]] = {
@@ -95,7 +94,9 @@ def get_constraint_schema() -> dict[str, Any]:
                         "type": "enum",
                         "values": ["feasibility", "minimize_cost"],
                         "default": "feasibility",
-                        "description": "feasibility = diverse foods, minimize_cost = cheapest solution",
+                        "description": (
+                            "feasibility = diverse foods, minimize_cost = cheapest solution"
+                        ),
                     },
                     "max_foods": {
                         "type": "int",
@@ -238,7 +239,7 @@ def get_food_filter_schema() -> dict[str, Any]:
     }
 
 
-def get_full_schema(conn: Optional[Connection] = None) -> dict[str, Any]:
+def get_full_schema(conn: Connection | None = None) -> dict[str, Any]:
     """Get complete schema documentation for LLM agents.
 
     Args:

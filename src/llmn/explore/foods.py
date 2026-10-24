@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from sqlite3 import Connection
-from typing import Any, Optional
+from typing import Any
 
 from llmn.data.nutrient_ids import NUTRIENT_IDS
 
@@ -13,16 +13,16 @@ from llmn.data.nutrient_ids import NUTRIENT_IDS
 class FoodFilter:
     """Filter criteria for food searches."""
 
-    query: Optional[str] = None
-    min_protein: Optional[float] = None  # per 100g
-    max_protein: Optional[float] = None
-    min_calories: Optional[float] = None
-    max_calories: Optional[float] = None
-    min_cost: Optional[float] = None
-    max_cost: Optional[float] = None
-    has_tag: Optional[str] = None
-    has_price: Optional[bool] = None
-    category: Optional[str] = None  # protein, fat, carb, legume, vegetable, fruit, mixed
+    query: str | None = None
+    min_protein: float | None = None  # per 100g
+    max_protein: float | None = None
+    min_calories: float | None = None
+    max_calories: float | None = None
+    min_cost: float | None = None
+    max_cost: float | None = None
+    has_tag: str | None = None
+    has_price: bool | None = None
+    category: str | None = None  # protein, fat, carb, legume, vegetable, fruit, mixed
     limit: int = 50
 
 
@@ -50,16 +50,20 @@ def explore_foods(
 
     # Add nutrient subqueries for filtering/display
     select_parts.append(
-        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1003) as protein_per_100g"
+        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id "
+        "AND nutrient_id = 1003) as protein_per_100g"
     )
     select_parts.append(
-        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as calories_per_100g"
+        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id "
+        "AND nutrient_id = 1008) as calories_per_100g"
     )
     select_parts.append(
-        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1004) as fat_per_100g"
+        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id "
+        "AND nutrient_id = 1004) as fat_per_100g"
     )
     select_parts.append(
-        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1005) as carbs_per_100g"
+        "(SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id "
+        "AND nutrient_id = 1005) as carbs_per_100g"
     )
 
     from_clause = """
@@ -91,16 +95,14 @@ def explore_foods(
 
     # Tag filter
     if filters.has_tag:
-        where_parts.append(
-            "EXISTS (SELECT 1 FROM food_tags WHERE fdc_id = f.fdc_id AND tag = ?)"
-        )
+        where_parts.append("EXISTS (SELECT 1 FROM food_tags WHERE fdc_id = f.fdc_id AND tag = ?)")
         params.append(filters.has_tag.lower())
 
     # Build query
     query = f"""
-        SELECT {', '.join(select_parts)}
+        SELECT {", ".join(select_parts)}
         {from_clause}
-        WHERE {' AND '.join(where_parts)}
+        WHERE {" AND ".join(where_parts)}
         GROUP BY f.fdc_id
     """
 
@@ -132,17 +134,19 @@ def explore_foods(
 
     results = []
     for row in rows:
-        results.append({
-            "fdc_id": row["fdc_id"],
-            "description": row["description"],
-            "data_type": row["data_type"],
-            "price_per_100g": row["price_per_100g"],
-            "tags": row["tags"].split(",") if row["tags"] else [],
-            "protein_per_100g": row["protein_per_100g"],
-            "calories_per_100g": row["calories_per_100g"],
-            "fat_per_100g": row["fat_per_100g"],
-            "carbs_per_100g": row["carbs_per_100g"],
-        })
+        results.append(
+            {
+                "fdc_id": row["fdc_id"],
+                "description": row["description"],
+                "data_type": row["data_type"],
+                "price_per_100g": row["price_per_100g"],
+                "tags": row["tags"].split(",") if row["tags"] else [],
+                "protein_per_100g": row["protein_per_100g"],
+                "calories_per_100g": row["calories_per_100g"],
+                "fat_per_100g": row["fat_per_100g"],
+                "carbs_per_100g": row["carbs_per_100g"],
+            }
+        )
 
     # Apply category filter if specified
     if filters.category:
@@ -157,10 +161,9 @@ def explore_foods(
         fdc_ids = [r["fdc_id"] for r in results]
         categories = classify_foods_in_db(conn, fdc_ids)
 
-        results = [
-            r for r in results
-            if categories.get(r["fdc_id"]) == target_category
-        ][:filters.limit]  # Apply limit after category filtering
+        results = [r for r in results if categories.get(r["fdc_id"]) == target_category][
+            : filters.limit
+        ]  # Apply limit after category filtering
 
     return results
 
@@ -168,7 +171,7 @@ def explore_foods(
 def get_food_nutrients(
     conn: Connection,
     fdc_ids: list[int],
-    nutrient_ids: Optional[list[int]] = None,
+    nutrient_ids: list[int] | None = None,
 ) -> dict[int, dict[str, Any]]:
     """Get nutrient data for multiple foods.
 
@@ -229,7 +232,7 @@ def get_food_nutrients(
 def compare_foods(
     conn: Connection,
     fdc_ids: list[int],
-    nutrient_names: Optional[list[str]] = None,
+    nutrient_names: list[str] | None = None,
 ) -> dict[str, Any]:
     """Compare nutrient content of multiple foods side-by-side.
 
@@ -284,10 +287,7 @@ def compare_foods(
 
         # Get nutrient name/unit from first food that has it
         for fdc_id in fdc_ids:
-            if (
-                fdc_id in nutrient_data
-                and nutrient_id in nutrient_data[fdc_id]["nutrients"]
-            ):
+            if fdc_id in nutrient_data and nutrient_id in nutrient_data[fdc_id]["nutrients"]:
                 info = nutrient_data[fdc_id]["nutrients"][nutrient_id]
                 row["name"] = info["display_name"] or info["name"]
                 row["unit"] = info["unit"]
@@ -296,13 +296,8 @@ def compare_foods(
         # Get value for each food
         row["values"] = {}
         for fdc_id in fdc_ids:
-            if (
-                fdc_id in nutrient_data
-                and nutrient_id in nutrient_data[fdc_id]["nutrients"]
-            ):
-                row["values"][fdc_id] = nutrient_data[fdc_id]["nutrients"][
-                    nutrient_id
-                ]["amount"]
+            if fdc_id in nutrient_data and nutrient_id in nutrient_data[fdc_id]["nutrients"]:
+                row["values"][fdc_id] = nutrient_data[fdc_id]["nutrients"][nutrient_id]["amount"]
             else:
                 row["values"][fdc_id] = None
 
@@ -324,9 +319,9 @@ def compare_foods(
 def find_high_nutrient_foods(
     conn: Connection,
     nutrient_name: str,
-    min_amount: Optional[float] = None,
-    max_amount: Optional[float] = None,
-    has_tag: Optional[str] = None,
+    min_amount: float | None = None,
+    max_amount: float | None = None,
+    has_tag: str | None = None,
     limit: int = 20,
 ) -> list[dict[str, Any]]:
     """Find foods high in a specific nutrient.
@@ -373,7 +368,8 @@ def find_high_nutrient_foods(
             f.description,
             fn.amount,
             p.price_per_100g,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as calories
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as calories
         FROM foods f
         JOIN food_nutrients fn ON f.fdc_id = fn.fdc_id
         LEFT JOIN prices p ON f.fdc_id = p.fdc_id

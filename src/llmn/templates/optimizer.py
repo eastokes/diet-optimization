@@ -10,15 +10,12 @@ MUCH smaller problem (16-20 variables vs 300+) with slot-specific targets.
 from __future__ import annotations
 
 import sqlite3
-from typing import Optional
 
 import numpy as np
 from scipy.sparse import csc_matrix, lil_matrix
 
-from llmn.optimizer.multiperiod_models import MealType
 from llmn.templates.definitions import get_template_for_patterns
 from llmn.templates.models import (
-    DietTemplate,
     OptimizedFood,
     OptimizedMeal,
     SelectedMeal,
@@ -311,14 +308,15 @@ def _get_nutrient_data(
 # High-Level API
 # =============================================================================
 
+
 def run_template_optimization(
     conn: sqlite3.Connection,
     patterns: list[str],
     daily_calories: tuple[float, float] = (1800, 2200),
     daily_protein: tuple[float, float] = (150, 200),
     strategy: SelectionStrategy = SelectionStrategy.RANDOM,
-    seed: Optional[int] = None,
-    excluded_foods: Optional[set[int]] = None,
+    seed: int | None = None,
+    excluded_foods: set[int] | None = None,
     max_retries: int = 5,
 ) -> TemplateResult:
     """Run template-based optimization for given dietary patterns.

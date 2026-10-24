@@ -7,7 +7,6 @@ import pytest
 from llmn.optimizer.models import NutrientConstraint
 from llmn.optimizer.multiperiod_constraints import MultiPeriodConstraintBuilder
 from llmn.optimizer.multiperiod_models import (
-    DEFAULT_CALORIE_SPLITS,
     DEFAULT_TYPICAL_PORTIONS,
     EquiCalorieConstraint,
     FoodMealAffinity,
@@ -222,7 +221,9 @@ class TestMultiPeriodConstraintBuilder:
                 MealConfig(meal_type=MealType.SNACK),
             ],
             food_meal_affinities=[
-                FoodMealAffinity(fdc_id=4, allowed_meals=[MealType.BREAKFAST]),  # Eggs only at breakfast
+                FoodMealAffinity(
+                    fdc_id=4, allowed_meals=[MealType.BREAKFAST]
+                ),  # Eggs only at breakfast
             ],
             explicit_food_ids=[1, 4],  # Chicken (1) and Eggs (4)
         )

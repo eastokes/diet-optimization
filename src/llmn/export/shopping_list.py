@@ -7,9 +7,7 @@ and produces a practical shopping list with weekly totals.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
-from llmn.data.food_categories import FoodCategory, classify_food
 from llmn.export.meal_consolidator import ConsolidatedResult
 
 
@@ -22,8 +20,8 @@ class ShoppingItem:
     total_grams: float
     daily_grams: float
     weekly_grams: float
-    estimated_cost: Optional[float] = None
-    unit_suggestion: Optional[str] = None  # e.g., "2 cans" or "1 lb"
+    estimated_cost: float | None = None
+    unit_suggestion: str | None = None  # e.g., "2 cans" or "1 lb"
     notes: list[str] = field(default_factory=list)
 
 
@@ -45,17 +43,14 @@ UNIT_CONVERSIONS = {
     "tuna": {"unit": "cans", "grams_per_unit": 140, "format": "{n} cans (5oz)"},
     "chicken": {"unit": "lb", "grams_per_unit": 454, "format": "{n:.1f} lb"},
     "fish": {"unit": "lb", "grams_per_unit": 454, "format": "{n:.1f} lb"},
-
     # Legumes
     "lentil": {"unit": "lb", "grams_per_unit": 454, "format": "{n:.1f} lb dried"},
     "bean": {"unit": "cans", "grams_per_unit": 425, "format": "{n} cans (15oz)"},
     "chickpea": {"unit": "cans", "grams_per_unit": 425, "format": "{n} cans (15oz)"},
-
     # Vegetables
     "spinach": {"unit": "bags", "grams_per_unit": 280, "format": "{n} bags (10oz)"},
     "broccoli": {"unit": "heads", "grams_per_unit": 500, "format": "{n} heads"},
     "kale": {"unit": "bunches", "grams_per_unit": 200, "format": "{n} bunches"},
-
     # Default
     "default": {"unit": "g", "grams_per_unit": 100, "format": "{n:.0f}g"},
 }
@@ -82,6 +77,7 @@ def suggest_shopping_unit(name: str, total_grams: float) -> str:
 
     # Calculate units needed (round up)
     import math
+
     units_needed = math.ceil(total_grams / conversion["grams_per_unit"])
 
     return conversion["format"].format(n=units_needed)
@@ -103,7 +99,26 @@ def categorize_for_shopping(name: str) -> str:
         return "Proteins - Meat"
     if any(kw in name_lower for kw in ["bean", "lentil", "chickpea", "tofu", "tempeh"]):
         return "Legumes & Plant Proteins"
-    if any(kw in name_lower for kw in ["spinach", "kale", "lettuce", "broccoli", "cauliflower", "pepper", "tomato", "onion", "garlic", "cabbage", "zucchini", "squash", "mushroom", "carrot", "celery"]):
+    if any(
+        kw in name_lower
+        for kw in [
+            "spinach",
+            "kale",
+            "lettuce",
+            "broccoli",
+            "cauliflower",
+            "pepper",
+            "tomato",
+            "onion",
+            "garlic",
+            "cabbage",
+            "zucchini",
+            "squash",
+            "mushroom",
+            "carrot",
+            "celery",
+        ]
+    ):
         return "Vegetables"
     if any(kw in name_lower for kw in ["apple", "banana", "berry", "orange", "grape"]):
         return "Fruits"
@@ -222,8 +237,7 @@ def format_shopping_list(shopping_list: ShoppingList) -> str:
 
         for item in items:
             lines.append(
-                f"   [ ] {item.name}: {item.unit_suggestion} "
-                f"({item.weekly_grams:.0f}g total)"
+                f"   [ ] {item.name}: {item.unit_suggestion} ({item.weekly_grams:.0f}g total)"
             )
 
         lines.append("")
@@ -254,7 +268,5 @@ def shopping_list_to_dict(shopping_list: ShoppingList) -> dict:
             ]
             for category, items in shopping_list.items_by_category.items()
         },
-        "weekly_totals": {
-            k: round(v, 0) for k, v in shopping_list.weekly_totals.items()
-        },
+        "weekly_totals": {k: round(v, 0) for k, v in shopping_list.weekly_totals.items()},
     }

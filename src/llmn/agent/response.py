@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -47,10 +47,10 @@ class AgentResponse:
 def create_response(
     command: str,
     success: bool = True,
-    data: Optional[dict[str, Any]] = None,
-    errors: Optional[list[str]] = None,
-    warnings: Optional[list[str]] = None,
-    suggestions: Optional[list[str]] = None,
+    data: dict[str, Any] | None = None,
+    errors: list[str] | None = None,
+    warnings: list[str] | None = None,
+    suggestions: list[str] | None = None,
     human_summary: str = "",
 ) -> AgentResponse:
     """Create an AgentResponse with defaults.
@@ -81,7 +81,7 @@ def create_response(
 def error_response(
     command: str,
     error: str,
-    suggestions: Optional[list[str]] = None,
+    suggestions: list[str] | None = None,
 ) -> AgentResponse:
     """Create an error response.
 

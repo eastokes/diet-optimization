@@ -95,11 +95,19 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     sex TEXT CHECK(sex IN ('male', 'female')),
     height_inches REAL,
     weight_lbs REAL,
-    activity_level TEXT CHECK(activity_level IN ('sedentary', 'lightly_active', 'moderate', 'active', 'very_active')),
+    activity_level TEXT CHECK(
+        activity_level IN ('sedentary', 'lightly_active', 'moderate', 'active', 'very_active')
+    ),
     goal TEXT,
     target_weight_lbs REAL,
-    diet_type TEXT CHECK(diet_type IN ('omnivore', 'pescatarian', 'vegetarian', 'vegan') OR diet_type IS NULL),
-    diet_style TEXT CHECK(diet_style IN ('standard', 'slow_carb', 'low_carb', 'keto', 'mediterranean', 'paleo') OR diet_style IS NULL),
+    diet_type TEXT CHECK(
+        diet_type IN ('omnivore', 'pescatarian', 'vegetarian', 'vegan')
+        OR diet_type IS NULL
+    ),
+    diet_style TEXT CHECK(
+        diet_style IN ('standard', 'slow_carb', 'low_carb', 'keto', 'mediterranean', 'paleo')
+        OR diet_style IS NULL
+    ),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -203,7 +211,9 @@ CREATE TABLE IF NOT EXISTS activity_periods (
     activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     effective_from DATE NOT NULL,
-    activity_level TEXT NOT NULL CHECK(activity_level IN ('sedentary', 'lightly_active', 'moderate', 'active', 'very_active')),
+    activity_level TEXT NOT NULL CHECK(
+        activity_level IN ('sedentary', 'lightly_active', 'moderate', 'active', 'very_active')
+    ),
     training_priority TEXT,
     notes TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -211,7 +221,8 @@ CREATE TABLE IF NOT EXISTS activity_periods (
     FOREIGN KEY (user_id) REFERENCES user_profiles(user_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_activity_periods_user_date ON activity_periods(user_id, effective_from);
+CREATE INDEX IF NOT EXISTS idx_activity_periods_user_date
+    ON activity_periods(user_id, effective_from);
 """
 
 # Append the v2 tables to the fresh-schema SQL while keeping the constant above
@@ -243,7 +254,10 @@ def migrate_user_profiles_add_diet_columns(conn) -> bool:
         conn.execute(
             """
             ALTER TABLE user_profiles
-            ADD COLUMN diet_type TEXT CHECK(diet_type IN ('omnivore', 'pescatarian', 'vegetarian', 'vegan') OR diet_type IS NULL)
+            ADD COLUMN diet_type TEXT CHECK(
+                diet_type IN ('omnivore', 'pescatarian', 'vegetarian', 'vegan')
+                OR diet_type IS NULL
+            )
             """
         )
         migrated = True
@@ -252,7 +266,12 @@ def migrate_user_profiles_add_diet_columns(conn) -> bool:
         conn.execute(
             """
             ALTER TABLE user_profiles
-            ADD COLUMN diet_style TEXT CHECK(diet_style IN ('standard', 'slow_carb', 'low_carb', 'keto', 'mediterranean', 'paleo') OR diet_style IS NULL)
+            ADD COLUMN diet_style TEXT CHECK(
+                diet_style IN (
+                    'standard', 'slow_carb', 'low_carb', 'keto', 'mediterranean', 'paleo'
+                )
+                OR diet_style IS NULL
+            )
             """
         )
         migrated = True

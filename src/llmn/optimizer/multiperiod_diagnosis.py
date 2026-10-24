@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 from qpsolvers import Problem, solve_problem
@@ -36,8 +36,8 @@ class ConstraintGroup:
     name: str  # Human-readable name
     row_indices: list[int]  # Indices into G matrix
     constraint_type: str  # "per_meal_cal", "per_meal_nutrient", "daily", "equicalorie"
-    meal_type: Optional[MealType] = None
-    nutrient_id: Optional[int] = None
+    meal_type: MealType | None = None
+    nutrient_id: int | None = None
     is_min: bool = True  # True for min constraint, False for max
 
 
@@ -171,7 +171,10 @@ def _group_constraints(
                 meal_type = None
             groups.append(
                 ConstraintGroup(
-                    name=f"{meal_name.title()} nutrient {nutrient_id} {'minimum' if is_min else 'maximum'}",
+                    name=(
+                        f"{meal_name.title()} nutrient {nutrient_id} "
+                        f"{'minimum' if is_min else 'maximum'}"
+                    ),
                     row_indices=[i],
                     constraint_type="per_meal_nutrient",
                     meal_type=meal_type,
@@ -266,8 +269,8 @@ def _find_iis(
 def _is_feasible(
     P: csc_matrix,
     q: np.ndarray,
-    G: Optional[csc_matrix],
-    h: Optional[np.ndarray],
+    G: csc_matrix | None,
+    h: np.ndarray | None,
     lb: np.ndarray,
     ub: np.ndarray,
 ) -> bool:
@@ -316,19 +319,13 @@ def _generate_suggestions(
     # Analyze by constraint type
     per_meal_cal = [c for c in iis_constraints if c.constraint_type == "per_meal_cal"]
     daily_cal = [c for c in iis_constraints if c.constraint_type == "daily_cal"]
-    per_meal_nutrient = [
-        c for c in iis_constraints if c.constraint_type == "per_meal_nutrient"
-    ]
-    daily_nutrient = [
-        c for c in iis_constraints if c.constraint_type == "daily_nutrient"
-    ]
+    per_meal_nutrient = [c for c in iis_constraints if c.constraint_type == "per_meal_nutrient"]
+    daily_nutrient = [c for c in iis_constraints if c.constraint_type == "daily_nutrient"]
     equicalorie = [c for c in iis_constraints if c.constraint_type == "equicalorie"]
 
     # Per-meal calorie conflicts
     if per_meal_cal:
-        meal_names = [
-            c.meal_type.value if c.meal_type else "unknown" for c in per_meal_cal
-        ]
+        meal_names = [c.meal_type.value if c.meal_type else "unknown" for c in per_meal_cal]
         unique_meals = list(set(meal_names))
 
         # Check if minimums are too high
@@ -359,9 +356,7 @@ def _generate_suggestions(
         # Check if per-meal sums conflict with daily
         if per_meal_cal:
             total_meal_min = sum(
-                m.calorie_target.min_calories
-                for m in request.meals
-                if m.calorie_target
+                m.calorie_target.min_calories for m in request.meals if m.calorie_target
             )
             if total_meal_min > daily_max:
                 suggestions.append(

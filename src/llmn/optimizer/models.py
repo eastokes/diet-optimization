@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 
 class ObjectiveType(Enum):
@@ -23,8 +22,8 @@ class NutrientConstraint:
     """
 
     nutrient_id: int
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
+    min_value: float | None = None
+    max_value: float | None = None
 
     def __post_init__(self) -> None:
         if self.min_value is None and self.max_value is None:
@@ -39,8 +38,8 @@ class FoodConstraint:
     """
 
     fdc_id: int
-    min_grams: Optional[float] = None
-    max_grams: Optional[float] = None
+    min_grams: float | None = None
+    max_grams: float | None = None
 
 
 @dataclass
@@ -61,9 +60,9 @@ class OptimizationRequest:
     lambda_cost: float = 1.0
     lambda_deviation: float = 0.001
     # Explicit food pool (bypasses tag filtering when set)
-    explicit_food_ids: Optional[list[int]] = None
+    explicit_food_ids: list[int] | None = None
     # For sparse solver (P2 feature)
-    max_foods_in_solution: Optional[int] = None
+    max_foods_in_solution: int | None = None
     min_grams_if_included: float = 50.0
 
 
@@ -86,8 +85,8 @@ class NutrientResult:
     name: str
     unit: str
     amount: float
-    min_constraint: Optional[float]
-    max_constraint: Optional[float]
+    min_constraint: float | None
+    max_constraint: float | None
     satisfied: bool
 
 
@@ -100,7 +99,7 @@ class ConstraintKKT:
     bound: float  # The constraint bound value
     value: float  # Actual value at solution
     slack: float  # Distance from bound (0 = binding)
-    multiplier: Optional[float]  # Lagrange multiplier (shadow price)
+    multiplier: float | None  # Lagrange multiplier (shadow price)
     is_binding: bool  # True if |slack| < tolerance
 
 
@@ -125,10 +124,10 @@ class OptimizationResult:
     status: str  # 'optimal', 'infeasible', 'unbounded', 'error'
     message: str
     foods: list[FoodResult]
-    total_cost: Optional[float]
+    total_cost: float | None
     nutrients: list[NutrientResult]
     solver_info: dict  # iterations, time, etc.
-    kkt_analysis: Optional[KKTAnalysis] = None  # Populated when --verbose is used
+    kkt_analysis: KKTAnalysis | None = None  # Populated when --verbose is used
 
 
 # Custom exceptions
@@ -143,9 +142,7 @@ class LLMNError(Exception):
 class InfeasibleDietError(LLMNError):
     """Raised when no feasible diet exists for given constraints."""
 
-    def __init__(
-        self, message: str, constraint_analysis: Optional[dict] = None
-    ):
+    def __init__(self, message: str, constraint_analysis: dict | None = None):
         super().__init__(message)
         self.constraint_analysis = constraint_analysis or {}
 

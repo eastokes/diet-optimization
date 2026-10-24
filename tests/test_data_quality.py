@@ -54,10 +54,16 @@ class TestDetectIncompleteFoods:
                 (100, "Broken food entry", "sr_legacy_food", True),
             )
             # Add nutrients with zero energy but non-zero protein
-            conn.execute("INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1008, 0))  # Energy = 0
-            conn.execute("INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1003, 25))  # Protein = 25g
+            conn.execute(
+                "INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1008, 0)
+            )  # Energy = 0
+            conn.execute(
+                "INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1003, 25)
+            )  # Protein = 25g
             conn.execute("INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1004, 5))  # Fat = 5g
-            conn.execute("INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1005, 10))  # Carbs = 10g
+            conn.execute(
+                "INSERT INTO food_nutrients VALUES (?, ?, ?)", (100, 1005, 10)
+            )  # Carbs = 10g
 
             issues = detect_incomplete_foods(conn, [1, 2, 100])
 

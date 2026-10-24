@@ -9,7 +9,6 @@ from __future__ import annotations
 import random
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional
 
 from llmn.data.pattern_staples import get_foods_for_sources
 from llmn.templates.models import (
@@ -191,9 +190,9 @@ def select_foods_for_template(
     conn: sqlite3.Connection,
     template: DietTemplate,
     strategy: SelectionStrategy = SelectionStrategy.RANDOM,
-    seed: Optional[int] = None,
-    excluded_foods: Optional[set[int]] = None,
-    preferred_foods: Optional[dict[str, int]] = None,
+    seed: int | None = None,
+    excluded_foods: set[int] | None = None,
+    preferred_foods: dict[str, int] | None = None,
 ) -> list[SelectedMeal]:
     """Select foods for all meals in a template.
 
@@ -235,9 +234,7 @@ def select_foods_for_template(
         )
 
         # Apply preferred foods (override selections)
-        meal_selection = _apply_preferred_foods(
-            conn, meal_selection, preferred, exclude_for_meal
-        )
+        meal_selection = _apply_preferred_foods(conn, meal_selection, preferred, exclude_for_meal)
 
         selections.append(meal_selection)
 
@@ -286,8 +283,7 @@ def _apply_preferred_foods(
             if preferred_id in source_ids:
                 # Get food description from database
                 cursor = conn.execute(
-                    "SELECT description FROM foods WHERE fdc_id = ?",
-                    (preferred_id,)
+                    "SELECT description FROM foods WHERE fdc_id = ?", (preferred_id,)
                 )
                 row = cursor.fetchone()
                 if row:

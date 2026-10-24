@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import json
 import sqlite3
-from typing import Optional
 
 
 class FoodQueries:
@@ -44,9 +42,7 @@ class FoodQueries:
         return conn.execute(query, (f"%{search_term}%", limit)).fetchall()
 
     @staticmethod
-    def get_food_by_id(
-        conn: sqlite3.Connection, fdc_id: int
-    ) -> Optional[sqlite3.Row]:
+    def get_food_by_id(conn: sqlite3.Connection, fdc_id: int) -> sqlite3.Row | None:
         """Get a single food by FDC ID.
 
         Args:
@@ -60,9 +56,7 @@ class FoodQueries:
         return conn.execute(query, (fdc_id,)).fetchone()
 
     @staticmethod
-    def get_food_nutrients(
-        conn: sqlite3.Connection, fdc_id: int
-    ) -> list[sqlite3.Row]:
+    def get_food_nutrients(conn: sqlite3.Connection, fdc_id: int) -> list[sqlite3.Row]:
         """Get all nutrients for a food with nutrient names.
 
         Args:
@@ -95,9 +89,7 @@ class FoodQueries:
         return {row[0] for row in conn.execute(query).fetchall()}
 
     @staticmethod
-    def set_food_active(
-        conn: sqlite3.Connection, fdc_id: int, is_active: bool
-    ) -> None:
+    def set_food_active(conn: sqlite3.Connection, fdc_id: int, is_active: bool) -> None:
         """Set a food's active status.
 
         Args:
@@ -113,9 +105,7 @@ class NutrientQueries:
     """Query functions for nutrients table."""
 
     @staticmethod
-    def get_nutrient_by_id(
-        conn: sqlite3.Connection, nutrient_id: int
-    ) -> Optional[sqlite3.Row]:
+    def get_nutrient_by_id(conn: sqlite3.Connection, nutrient_id: int) -> sqlite3.Row | None:
         """Get a nutrient definition by ID.
 
         Args:
@@ -170,9 +160,7 @@ class PriceQueries:
     """Query functions for prices table."""
 
     @staticmethod
-    def get_price(
-        conn: sqlite3.Connection, fdc_id: int
-    ) -> Optional[sqlite3.Row]:
+    def get_price(conn: sqlite3.Connection, fdc_id: int) -> sqlite3.Row | None:
         """Get price for a food.
 
         Args:
@@ -228,8 +216,8 @@ class PriceQueries:
         conn: sqlite3.Connection,
         fdc_id: int,
         price_per_100g: float,
-        source: Optional[str] = None,
-        notes: Optional[str] = None,
+        source: str | None = None,
+        notes: str | None = None,
     ) -> None:
         """Insert or update a price for a food.
 
@@ -359,7 +347,7 @@ class ProfileQueries:
         conn: sqlite3.Connection,
         name: str,
         constraints_json: str,
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> int:
         """Create a new constraint profile.
 
@@ -380,9 +368,7 @@ class ProfileQueries:
         return cursor.lastrowid or 0
 
     @staticmethod
-    def get_profile_by_name(
-        conn: sqlite3.Connection, name: str
-    ) -> Optional[sqlite3.Row]:
+    def get_profile_by_name(conn: sqlite3.Connection, name: str) -> sqlite3.Row | None:
         """Get a profile by name.
 
         Args:
@@ -396,9 +382,7 @@ class ProfileQueries:
         return conn.execute(query, (name,)).fetchone()
 
     @staticmethod
-    def get_profile_by_id(
-        conn: sqlite3.Connection, profile_id: int
-    ) -> Optional[sqlite3.Row]:
+    def get_profile_by_id(conn: sqlite3.Connection, profile_id: int) -> sqlite3.Row | None:
         """Get a profile by ID.
 
         Args:
@@ -448,7 +432,7 @@ class ProfileQueries:
         conn: sqlite3.Connection,
         name: str,
         constraints_json: str,
-        description: Optional[str] = None,
+        description: str | None = None,
     ) -> bool:
         """Update an existing profile.
 
@@ -476,9 +460,9 @@ class OptimizationRunQueries:
     @staticmethod
     def save_run(
         conn: sqlite3.Connection,
-        profile_id: Optional[int],
+        profile_id: int | None,
         status: str,
-        total_cost: Optional[float],
+        total_cost: float | None,
         result_json: str,
     ) -> int:
         """Save an optimization run.
@@ -501,9 +485,7 @@ class OptimizationRunQueries:
         return cursor.lastrowid or 0
 
     @staticmethod
-    def get_run_by_id(
-        conn: sqlite3.Connection, run_id: int
-    ) -> Optional[sqlite3.Row]:
+    def get_run_by_id(conn: sqlite3.Connection, run_id: int) -> sqlite3.Row | None:
         """Get a specific optimization run.
 
         Args:
@@ -517,7 +499,7 @@ class OptimizationRunQueries:
         return conn.execute(query, (run_id,)).fetchone()
 
     @staticmethod
-    def get_latest_run(conn: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    def get_latest_run(conn: sqlite3.Connection) -> sqlite3.Row | None:
         """Get the most recent optimization run.
 
         Args:
@@ -534,9 +516,7 @@ class OptimizationRunQueries:
         return conn.execute(query).fetchone()
 
     @staticmethod
-    def list_runs(
-        conn: sqlite3.Connection, limit: int = 10
-    ) -> list[sqlite3.Row]:
+    def list_runs(conn: sqlite3.Connection, limit: int = 10) -> list[sqlite3.Row]:
         """List recent optimization runs.
 
         Args:

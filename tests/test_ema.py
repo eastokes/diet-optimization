@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 
 from llmn.tracking.ema import (
-    DEFAULT_SMOOTHING,
     calculate_trend_from_scratch,
     time_scaled_alpha,
     update_trend,

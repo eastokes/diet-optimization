@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional
 
 from llmn.optimizer.multiperiod_models import MealType
 
@@ -76,8 +75,8 @@ class MealTemplate:
 
     meal_type: MealType
     slots: list[SlotDefinition]
-    calorie_range: Optional[tuple[float, float]] = None
-    protein_min: Optional[float] = None
+    calorie_range: tuple[float, float] | None = None
+    protein_min: float | None = None
 
 
 @dataclass
@@ -101,8 +100,8 @@ class DietTemplate:
     description: str
     meals: list[MealTemplate]
     diversity_rule: DiversityRule = DiversityRule.NO_REPEAT
-    daily_calorie_range: Optional[tuple[float, float]] = None
-    daily_protein_min: Optional[float] = None
+    daily_calorie_range: tuple[float, float] | None = None
+    daily_protein_min: float | None = None
 
 
 @dataclass
@@ -152,11 +151,11 @@ class TemplateOptimizationRequest:
     """
 
     template: DietTemplate
-    selections: Optional[list[SelectedMeal]] = None
+    selections: list[SelectedMeal] | None = None
     daily_calories: tuple[float, float] = (1800, 2200)
     daily_protein: tuple[float, float] = (150, 200)
     selection_strategy: SelectionStrategy = SelectionStrategy.RANDOM
-    seed: Optional[int] = None
+    seed: int | None = None
     max_retries: int = 5
     excluded_foods: set[int] = field(default_factory=set)
     preferred_foods: dict[str, int] = field(default_factory=dict)

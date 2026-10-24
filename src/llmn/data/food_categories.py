@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import sqlite3
 from enum import Enum
-from typing import Optional
 
 
 class FoodCategory(Enum):
@@ -26,21 +25,68 @@ class FoodCategory(Enum):
 
 # Keywords to help identify specific food types
 LEGUME_KEYWORDS = [
-    "bean", "lentil", "chickpea", "pea,", "hummus", "pinto", "black bean",
-    "kidney", "navy bean", "lima", "edamame", "soybean",
+    "bean",
+    "lentil",
+    "chickpea",
+    "pea,",
+    "hummus",
+    "pinto",
+    "black bean",
+    "kidney",
+    "navy bean",
+    "lima",
+    "edamame",
+    "soybean",
 ]
 
 FRUIT_KEYWORDS = [
-    "apple", "banana", "berry", "orange", "grape", "mango", "pear",
-    "peach", "plum", "cherry", "melon", "watermelon", "cantaloupe",
-    "strawberr", "blueberr", "raspberr", "blackberr", "kiwi", "pineapple",
+    "apple",
+    "banana",
+    "berry",
+    "orange",
+    "grape",
+    "mango",
+    "pear",
+    "peach",
+    "plum",
+    "cherry",
+    "melon",
+    "watermelon",
+    "cantaloupe",
+    "strawberr",
+    "blueberr",
+    "raspberr",
+    "blackberr",
+    "kiwi",
+    "pineapple",
 ]
 
 VEGETABLE_KEYWORDS = [
-    "spinach", "kale", "broccoli", "cauliflower", "lettuce", "cabbage",
-    "carrot", "celery", "cucumber", "pepper", "tomato", "onion", "garlic",
-    "asparagus", "zucchini", "squash", "eggplant", "mushroom", "artichoke",
-    "beet", "radish", "turnip", "chard", "collard", "arugula",
+    "spinach",
+    "kale",
+    "broccoli",
+    "cauliflower",
+    "lettuce",
+    "cabbage",
+    "carrot",
+    "celery",
+    "cucumber",
+    "pepper",
+    "tomato",
+    "onion",
+    "garlic",
+    "asparagus",
+    "zucchini",
+    "squash",
+    "eggplant",
+    "mushroom",
+    "artichoke",
+    "beet",
+    "radish",
+    "turnip",
+    "chard",
+    "collard",
+    "arugula",
 ]
 
 # USDA nutrient IDs
@@ -190,7 +236,7 @@ def classify_foods_in_db(
 def get_foods_by_category(
     conn: sqlite3.Connection,
     category: FoodCategory,
-    tag: Optional[str] = None,
+    tag: str | None = None,
     limit: int = 50,
 ) -> list[dict]:
     """Get foods that belong to a specific category.
@@ -234,11 +280,13 @@ def get_foods_by_category(
     results = []
     for fdc_id in fdc_ids:
         if categories.get(fdc_id) == category:
-            results.append({
-                "fdc_id": fdc_id,
-                "description": descriptions[fdc_id],
-                "category": category.value,
-            })
+            results.append(
+                {
+                    "fdc_id": fdc_id,
+                    "description": descriptions[fdc_id],
+                    "category": category.value,
+                }
+            )
             if len(results) >= limit:
                 break
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -19,7 +19,7 @@ from llmn.optimizer.serialization import serialize_request
 class TableFormatter:
     """Format results as Rich tables for terminal display."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Console | None = None):
         """Initialize the formatter.
 
         Args:
@@ -30,7 +30,7 @@ class TableFormatter:
     def format(
         self,
         result: OptimizationResult,
-        profile_name: Optional[str] = None,
+        profile_name: str | None = None,
     ) -> None:
         """Print formatted tables to console.
 
@@ -119,10 +119,10 @@ class JSONFormatter:
     def format(
         self,
         result: OptimizationResult,
-        profile_name: Optional[str] = None,
-        run_id: Optional[int] = None,
-        request: Optional[OptimizationRequest] = None,
-        data_quality_warnings: Optional[list[str]] = None,
+        profile_name: str | None = None,
+        run_id: int | None = None,
+        request: OptimizationRequest | None = None,
+        data_quality_warnings: list[str] | None = None,
         include_meal_allocation: bool = False,
     ) -> str:
         """Return JSON string.
@@ -201,7 +201,7 @@ class MarkdownFormatter:
     def format(
         self,
         result: OptimizationResult,
-        profile_name: Optional[str] = None,
+        profile_name: str | None = None,
         days: int = 1,
     ) -> str:
         """Return Markdown string.
@@ -233,7 +233,9 @@ class MarkdownFormatter:
         lines.extend(["", "## Foods", "", "| Food | Amount | Cost |", "|------|--------|------|"])
 
         for food in result.foods:
-            lines.append(f"| {clean_food_name(food.description)} | {food.grams:.0f}g | ${food.cost:.2f} |")
+            lines.append(
+                f"| {clean_food_name(food.description)} | {food.grams:.0f}g | ${food.cost:.2f} |"
+            )
 
         lines.extend(
             [
@@ -263,7 +265,7 @@ class MarkdownFormatter:
 class KKTFormatter:
     """Format KKT analysis for terminal display."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Console | None = None):
         """Initialize the formatter.
 
         Args:
@@ -277,14 +279,10 @@ class KKTFormatter:
         Args:
             kkt: KKT analysis to format
         """
+
         # Summary panel
         def status_str(ok: bool) -> str:
             return "[green]Satisfied[/green]" if ok else "[red]Violated[/red]"
-
-        # Check if we have multiplier data
-        has_multipliers = any(
-            c.multiplier is not None for c in kkt.nutrient_constraints
-        )
 
         status_lines = [
             f"[bold]Solver:[/bold] {kkt.solver_type}",
@@ -295,7 +293,8 @@ class KKTFormatter:
             f"[bold]2. Dual Feasibility:[/bold] {status_str(kkt.dual_feasible)}",
             "   (All multipliers λ ≥ 0 for inequality constraints)",
             "",
-            f"[bold]3. Complementary Slackness:[/bold] {status_str(kkt.complementary_slackness_satisfied)}",
+            f"[bold]3. Complementary Slackness:[/bold] "
+            f"{status_str(kkt.complementary_slackness_satisfied)}",
             "   (λᵢ · gᵢ(x*) = 0 for all constraints)",
             "",
             f"[bold]4. Stationarity:[/bold] ||∇L|| = {kkt.stationarity_residual:.2e}",
@@ -347,7 +346,9 @@ class KKTFormatter:
 
                 # Show up to 10
                 for c in upper_bounds[:10]:
-                    mult_str = f"{c.multiplier:.4f}" if c.multiplier is not None else "[dim]N/A[/dim]"
+                    mult_str = (
+                        f"{c.multiplier:.4f}" if c.multiplier is not None else "[dim]N/A[/dim]"
+                    )
                     food_table.add_row(
                         c.name,
                         f"{c.bound:.1f}g",
@@ -358,7 +359,9 @@ class KKTFormatter:
                 if len(upper_bounds) > 10:
                     food_table.add_row(
                         f"[dim]... and {len(upper_bounds) - 10} more[/dim]",
-                        "", "", "",
+                        "",
+                        "",
+                        "",
                     )
 
                 self.console.print(food_table)
@@ -370,13 +373,13 @@ class KKTFormatter:
 def format_result(
     result: OptimizationResult,
     output_format: str = "table",
-    profile_name: Optional[str] = None,
-    run_id: Optional[int] = None,
-    console: Optional[Console] = None,
-    request: Optional[OptimizationRequest] = None,
-    data_quality_warnings: Optional[list[str]] = None,
+    profile_name: str | None = None,
+    run_id: int | None = None,
+    console: Console | None = None,
+    request: OptimizationRequest | None = None,
+    data_quality_warnings: list[str] | None = None,
     include_meal_allocation: bool = False,
-) -> Optional[str]:
+) -> str | None:
     """Format optimization result in the specified format.
 
     Args:

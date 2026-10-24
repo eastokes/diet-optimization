@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from llmn.optimizer.models import NutrientConstraint, OptimizationRequest
 from llmn.optimizer.solver import solve_diet_problem, solve_lp, solve_qp
@@ -17,13 +16,15 @@ class TestSolveLP:
         # Two foods: food 1 is expensive but calorie-dense, food 2 is cheap
         # Values are per gram (not per 100g)
         costs = np.array([0.01, 0.002])  # $0.01/g and $0.002/g
-        nutrient_matrix = np.array([
-            [1.65, 0.31],  # food 1: 165 kcal/100g, 31g protein/100g (like chicken)
-            [1.30, 0.03],  # food 2: 130 kcal/100g, 3g protein/100g (like rice)
-        ])  # Already per gram (kcal/g and g-protein/g)
+        nutrient_matrix = np.array(
+            [
+                [1.65, 0.31],  # food 1: 165 kcal/100g, 31g protein/100g (like chicken)
+                [1.30, 0.03],  # food 2: 130 kcal/100g, 3g protein/100g (like rice)
+            ]
+        )  # Already per gram (kcal/g and g-protein/g)
 
         nutrient_mins = np.array([1800, -np.inf])  # 1800 kcal min, no protein min
-        nutrient_maxs = np.array([2200, np.inf])   # 2200 kcal max
+        nutrient_maxs = np.array([2200, np.inf])  # 2200 kcal max
         food_bounds = [(0, 1000), (0, 1000)]  # Allow up to 1kg each
 
         result = solve_lp(costs, nutrient_matrix, nutrient_mins, nutrient_maxs, food_bounds)
@@ -56,10 +57,12 @@ class TestSolveQP:
     def test_qp_with_deviation_penalty(self):
         """Test that QP produces a solution."""
         costs = np.array([0.01, 0.002])
-        nutrient_matrix = np.array([
-            [1.65, 0.31],  # 165 kcal/100g (like chicken)
-            [1.30, 0.03],  # 130 kcal/100g (like rice)
-        ])  # Already per gram
+        nutrient_matrix = np.array(
+            [
+                [1.65, 0.31],  # 165 kcal/100g (like chicken)
+                [1.30, 0.03],  # 130 kcal/100g (like rice)
+            ]
+        )  # Already per gram
 
         nutrient_mins = np.array([1800, -np.inf])
         nutrient_maxs = np.array([2200, np.inf])
@@ -67,8 +70,14 @@ class TestSolveQP:
         typical = np.array([300, 500])  # Typical consumption
 
         result = solve_qp(
-            costs, nutrient_matrix, nutrient_mins, nutrient_maxs,
-            food_bounds, typical, lambda_cost=1.0, lambda_deviation=0.001
+            costs,
+            nutrient_matrix,
+            nutrient_mins,
+            nutrient_maxs,
+            food_bounds,
+            typical,
+            lambda_cost=1.0,
+            lambda_deviation=0.001,
         )
 
         assert result["success"], f"Optimization failed: {result['message']}"
@@ -102,9 +111,7 @@ class TestSolveDietProblem:
         assert len(result.foods) > 0
 
         # Verify calorie constraint
-        calories = next(
-            (n for n in result.nutrients if n.nutrient_id == 1008), None
-        )
+        calories = next((n for n in result.nutrients if n.nutrient_id == 1008), None)
         assert calories is not None
         assert calories.amount >= 1800 - 1
         assert calories.amount <= 2200 + 1

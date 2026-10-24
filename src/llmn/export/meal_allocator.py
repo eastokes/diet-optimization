@@ -41,7 +41,6 @@ MEAL_AFFINITY: dict[str, list[str]] = {
     "cereal": ["breakfast"],
     "yogurt": ["breakfast", "snack"],
     "cottage cheese": ["breakfast", "snack"],
-
     # Lunch/dinner foods
     "chicken": ["lunch", "dinner"],
     "fish": ["lunch", "dinner"],
@@ -52,13 +51,11 @@ MEAL_AFFINITY: dict[str, list[str]] = {
     "shrimp": ["lunch", "dinner"],
     "beef": ["lunch", "dinner"],
     "pork": ["lunch", "dinner"],
-
     # Legumes for lunch/dinner
     "bean": ["lunch", "dinner"],
     "lentil": ["lunch", "dinner"],
     "chickpea": ["lunch", "dinner"],
     "hummus": ["lunch", "dinner"],
-
     # Vegetables for lunch/dinner
     "broccoli": ["lunch", "dinner"],
     "spinach": ["lunch", "dinner"],
@@ -69,7 +66,6 @@ MEAL_AFFINITY: dict[str, list[str]] = {
     "tomato": ["lunch", "dinner"],
     "pepper": ["lunch", "dinner"],
     "cabbage": ["lunch", "dinner"],
-
     # Snack foods
     "nut": ["snack"],
     "almond": ["snack"],
@@ -145,14 +141,16 @@ def allocate_to_meals(
         calories = f.nutrients.get(1008, 0) * f.grams / 100 if f.nutrients else 0
         protein = f.nutrients.get(1003, 0) * f.grams / 100 if f.nutrients else 0
 
-        food_info.append({
-            "fdc_id": f.fdc_id,
-            "description": f.description,
-            "grams": round(f.grams, 1),
-            "calories": round(calories, 0),
-            "protein": round(protein, 1),
-            "affinity": get_meal_affinity(f.description),
-        })
+        food_info.append(
+            {
+                "fdc_id": f.fdc_id,
+                "description": f.description,
+                "grams": round(f.grams, 1),
+                "calories": round(calories, 0),
+                "protein": round(protein, 1),
+                "affinity": get_meal_affinity(f.description),
+            }
+        )
 
     # Sort by calories (larger items first for better packing)
     food_info.sort(key=lambda x: -x["calories"])

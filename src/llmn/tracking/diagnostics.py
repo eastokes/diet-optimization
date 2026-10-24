@@ -6,19 +6,17 @@ import math
 import sqlite3
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Optional
 
 from llmn.tracking.ema import estimate_daily_calorie_balance, estimate_weekly_change
 from llmn.tracking.estimation import AnalysisWindow, summarize_intake
 from llmn.tracking.formula import mifflin_tdee_at_weight
-from llmn.tracking.models import TDEEEstimate, UserProfile, WeightEntry
+from llmn.tracking.models import UserProfile
 from llmn.tracking.queries import (
     IntakeQueries,
     TDEEQueries,
     UserQueries,
     WeightQueries,
 )
-from llmn.tracking.tdee_filter import TDEEFilter
 
 
 @dataclass
@@ -43,9 +41,9 @@ class TDEEReport:
     tdee_bias: float
     adjusted_tdee: float
     uncertainty_95ci: float
-    avg_actual_calories: Optional[float]
-    expected_deficit: Optional[float]  # mifflin_tdee - planned
-    implied_deficit: Optional[float]  # from trend change
+    avg_actual_calories: float | None
+    expected_deficit: float | None  # mifflin_tdee - planned
+    implied_deficit: float | None  # from trend change
 
 
 @dataclass
@@ -53,10 +51,10 @@ class ProgressReport:
     """Combined progress report."""
 
     weight: WeightReport
-    tdee: Optional[TDEEReport]
-    goal_weight: Optional[float]
-    remaining_lbs: Optional[float]
-    weeks_to_goal: Optional[float]
+    tdee: TDEEReport | None
+    goal_weight: float | None
+    remaining_lbs: float | None
+    weeks_to_goal: float | None
     notes: list[str]
 
 
@@ -68,7 +66,7 @@ def calculate_mifflin_tdee(profile: UserProfile) -> float:
 def calculate_mifflin_tdee_at_weight(
     profile: UserProfile,
     weight_lbs: float,
-    activity_level: Optional[str] = None,
+    activity_level: str | None = None,
 ) -> float:
     """Calculate TDEE at a specific weight and optional activity override."""
     return mifflin_tdee_at_weight(profile, weight_lbs, activity_level)
@@ -78,13 +76,11 @@ def generate_weight_report(
     conn: sqlite3.Connection,
     user_id: int,
     days: int = 30,
-    as_of: Optional[date] = None,
-) -> Optional[WeightReport]:
+    as_of: date | None = None,
+) -> WeightReport | None:
     """Generate a weight tracking report for a calendar interval."""
     end_date = as_of or date.today()
-    history = WeightQueries.get_weight_history(
-        conn, user_id, days=days, end_date=end_date
-    )
+    history = WeightQueries.get_weight_history(conn, user_id, days=days, end_date=end_date)
 
     if len(history) < 2:
         return None
@@ -118,8 +114,8 @@ def generate_tdee_report(
     conn: sqlite3.Connection,
     user_id: int,
     profile: UserProfile,
-    weight_report: Optional[WeightReport] = None,
-    as_of: Optional[date] = None,
+    weight_report: WeightReport | None = None,
+    as_of: date | None = None,
 ) -> TDEEReport:
     """Generate a TDEE analysis report."""
     mifflin_tdee = calculate_mifflin_tdee(profile)
@@ -142,12 +138,8 @@ def generate_tdee_report(
     # consumed intake; missing actual data leaves the average unknown.
     end_date = as_of or date.today()
     start_date = end_date - timedelta(days=29)
-    intake_entries = IntakeQueries.get_entries(
-        conn, user_id, start_date, end_date, kind="actual"
-    )
-    intake_summary = summarize_intake(
-        intake_entries, AnalysisWindow(start_date, end_date)
-    )
+    intake_entries = IntakeQueries.get_entries(conn, user_id, start_date, end_date, kind="actual")
+    intake_summary = summarize_intake(intake_entries, AnalysisWindow(start_date, end_date))
     avg_calories = intake_summary.mean_kcal
 
     expected_deficit = None
@@ -173,8 +165,8 @@ def generate_progress_report(
     conn: sqlite3.Connection,
     user_id: int,
     days: int = 30,
-    as_of: Optional[date] = None,
-) -> Optional[ProgressReport]:
+    as_of: date | None = None,
+) -> ProgressReport | None:
     """Generate a comprehensive progress report."""
     profile = UserQueries.get_user(conn, user_id)
     if profile is None:
@@ -184,9 +176,7 @@ def generate_progress_report(
     if weight_report is None:
         return None
 
-    tdee_report = generate_tdee_report(
-        conn, user_id, profile, weight_report, as_of=as_of
-    )
+    tdee_report = generate_tdee_report(conn, user_id, profile, weight_report, as_of=as_of)
 
     # Goal progress
     goal_weight = profile.target_weight_lbs
@@ -209,21 +199,23 @@ def generate_progress_report(
             if diff > 0:
                 notes.append(
                     f"Losing faster than expected by ~{abs(diff):.0f} kcal/day. "
-                    "Possible causes: actual intake lower than logged, activity higher than estimated, "
+                    "Possible causes: actual intake lower than logged, "
+                    "activity higher than estimated, "
                     "or metabolism faster than Mifflin-St Jeor predicts."
                 )
             else:
                 notes.append(
                     f"Losing slower than expected by ~{abs(diff):.0f} kcal/day. "
-                    "Possible causes: actual intake higher than logged, activity lower than estimated, "
+                    "Possible causes: actual intake higher than logged, "
+                    "activity lower than estimated, "
                     "or metabolism slower than Mifflin-St Jeor predicts."
                 )
 
     if weight_report.weekly_rate < -2.0:
-        notes.append(
-            "Warning: Losing more than 2 lbs/week. This pace may not be sustainable."
-        )
-    elif weight_report.weekly_rate > 0 and goal_weight and weight_report.current_trend > goal_weight:
+        notes.append("Warning: Losing more than 2 lbs/week. This pace may not be sustainable.")
+    elif (
+        weight_report.weekly_rate > 0 and goal_weight and weight_report.current_trend > goal_weight
+    ):
         notes.append("You are currently gaining weight while above your goal weight.")
 
     return ProgressReport(
@@ -246,7 +238,8 @@ def format_weight_report(report: WeightReport) -> str:
         "=" * 45,
         f"Current weight: {report.current_weight:.1f} lbs",
         f"Current trend:  {report.current_trend:.1f} lbs (EMA)",
-        f"Trend change:   {abs(report.trend_change):.1f} lbs {direction} (from {report.start_trend:.1f})",
+        f"Trend change:   {abs(report.trend_change):.1f} lbs {direction} "
+        f"(from {report.start_trend:.1f})",
         f"Rate:           {abs(report.weekly_rate):.1f} lbs/week ({rate_dir})",
     ]
 
@@ -261,7 +254,8 @@ def format_tdee_report(report: TDEEReport) -> str:
         "=" * 50,
         f"Mifflin-St Jeor baseline: {report.mifflin_tdee:.0f} kcal/day",
         f"Learned adjustment:       {report.tdee_bias:+.0f} kcal/day",
-        f"Your estimated TDEE:      {report.adjusted_tdee:.0f} ± {report.uncertainty_95ci:.0f} kcal/day",
+        f"Your estimated TDEE:      {report.adjusted_tdee:.0f} ± "
+        f"{report.uncertainty_95ci:.0f} kcal/day",
     ]
 
     if report.avg_actual_calories:

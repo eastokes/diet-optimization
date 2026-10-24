@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
 
 from llmn.db.schema import get_schema_sql
 
@@ -57,9 +57,7 @@ class DatabaseConnection:
             conn.executescript(get_schema_sql())
             migrate_schema(conn)
 
-    def execute_query(
-        self, query: str, params: tuple = ()
-    ) -> list[sqlite3.Row]:
+    def execute_query(self, query: str, params: tuple = ()) -> list[sqlite3.Row]:
         """Execute a query and return results.
 
         Args:
@@ -123,7 +121,7 @@ class DatabaseConnection:
 
 
 # Global database instance (lazy loaded)
-_db: Optional[DatabaseConnection] = None
+_db: DatabaseConnection | None = None
 
 
 def get_db() -> DatabaseConnection:
@@ -143,7 +141,7 @@ def get_db() -> DatabaseConnection:
     return _db
 
 
-def set_db(db: Optional[DatabaseConnection]) -> None:
+def set_db(db: DatabaseConnection | None) -> None:
     """Set (or clear) the global database instance.
 
     Useful for testing with a custom database.

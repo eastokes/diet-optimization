@@ -11,31 +11,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional
 
 
 class Sex(Enum):
     """Biological sex for BMR calculation."""
+
     MALE = "male"
     FEMALE = "female"
 
 
 class ActivityLevel(Enum):
     """Activity level multipliers for TDEE calculation."""
-    SEDENTARY = "sedentary"          # Little or no exercise
-    LIGHT = "light"                  # Light exercise 1-3 days/week
-    MODERATE = "moderate"            # Moderate exercise 3-5 days/week
-    ACTIVE = "active"                # Hard exercise 6-7 days/week
-    VERY_ACTIVE = "very_active"      # Very hard exercise, physical job
+
+    SEDENTARY = "sedentary"  # Little or no exercise
+    LIGHT = "light"  # Light exercise 1-3 days/week
+    MODERATE = "moderate"  # Moderate exercise 3-5 days/week
+    ACTIVE = "active"  # Hard exercise 6-7 days/week
+    VERY_ACTIVE = "very_active"  # Very hard exercise, physical job
 
 
 class Goal(Enum):
     """Body composition goal."""
-    FAT_LOSS = "fat_loss"            # 500-750 cal deficit
+
+    FAT_LOSS = "fat_loss"  # 500-750 cal deficit
     AGGRESSIVE_FAT_LOSS = "aggressive_fat_loss"  # 750-1000 cal deficit
-    MAINTENANCE = "maintenance"       # TDEE
-    LEAN_GAIN = "lean_gain"          # 200-300 cal surplus
-    MUSCLE_GAIN = "muscle_gain"      # 400-500 cal surplus
+    MAINTENANCE = "maintenance"  # TDEE
+    LEAN_GAIN = "lean_gain"  # 200-300 cal surplus
+    MUSCLE_GAIN = "muscle_gain"  # 400-500 cal surplus
 
 
 # Activity level multipliers (Harris-Benedict activity factors)
@@ -85,22 +87,23 @@ def normalize_activity_level(value: ActivityLevel | str) -> ActivityLevel:
         valid = ", ".join(sorted(_ACTIVITY_ALIASES))
         raise ValueError(f"activity_level must be one of {valid}, got '{value}'") from exc
 
+
 # Calorie adjustments by goal (deficit or surplus from TDEE)
 GOAL_ADJUSTMENTS = {
-    Goal.FAT_LOSS: (-750, -500),           # 500-750 cal deficit
+    Goal.FAT_LOSS: (-750, -500),  # 500-750 cal deficit
     Goal.AGGRESSIVE_FAT_LOSS: (-1000, -750),  # 750-1000 cal deficit
-    Goal.MAINTENANCE: (0, 0),               # No adjustment
-    Goal.LEAN_GAIN: (200, 300),            # 200-300 cal surplus
-    Goal.MUSCLE_GAIN: (400, 500),          # 400-500 cal surplus
+    Goal.MAINTENANCE: (0, 0),  # No adjustment
+    Goal.LEAN_GAIN: (200, 300),  # 200-300 cal surplus
+    Goal.MUSCLE_GAIN: (400, 500),  # 400-500 cal surplus
 }
 
 # Protein recommendations by goal (grams per pound body weight)
 PROTEIN_RECOMMENDATIONS = {
-    Goal.FAT_LOSS: (0.8, 1.0),              # Higher to preserve muscle
-    Goal.AGGRESSIVE_FAT_LOSS: (1.0, 1.2),   # Even higher for aggressive cuts
-    Goal.MAINTENANCE: (0.7, 0.9),           # Moderate
-    Goal.LEAN_GAIN: (0.8, 1.0),             # Moderate-high
-    Goal.MUSCLE_GAIN: (0.9, 1.1),           # High for muscle building
+    Goal.FAT_LOSS: (0.8, 1.0),  # Higher to preserve muscle
+    Goal.AGGRESSIVE_FAT_LOSS: (1.0, 1.2),  # Even higher for aggressive cuts
+    Goal.MAINTENANCE: (0.7, 0.9),  # Moderate
+    Goal.LEAN_GAIN: (0.8, 1.0),  # Moderate-high
+    Goal.MUSCLE_GAIN: (0.9, 1.1),  # High for muscle building
 }
 
 
@@ -116,15 +119,15 @@ class NutritionTargets:
     sodium_max: int
 
     # Reference values
-    bmr: int                    # Basal Metabolic Rate
-    tdee: int                   # Total Daily Energy Expenditure
-    deficit_or_surplus: int     # Calories above/below TDEE
+    bmr: int  # Basal Metabolic Rate
+    tdee: int  # Total Daily Energy Expenditure
+    deficit_or_surplus: int  # Calories above/below TDEE
 
     # Goal context
     goal: str
     weight_lbs: float
-    target_weight_lbs: Optional[float]
-    projected_weeks: Optional[int]  # Weeks to reach target weight
+    target_weight_lbs: float | None
+    projected_weeks: int | None  # Weeks to reach target weight
 
     def to_yaml_constraints(self) -> dict:
         """Convert to YAML constraint format."""
@@ -160,9 +163,7 @@ class NutritionTargets:
 
         if self.target_weight_lbs and self.projected_weeks:
             weight_to_lose = self.weight_lbs - self.target_weight_lbs
-            lines.append(
-                f"Projected: {weight_to_lose:.0f} lbs in {self.projected_weeks} weeks"
-            )
+            lines.append(f"Projected: {weight_to_lose:.0f} lbs in {self.projected_weeks} weeks")
 
         return "\n".join(lines)
 
@@ -221,7 +222,7 @@ def calculate_targets(
     height_inches: float,
     weight_lbs: float,
     goal: str,
-    target_weight_lbs: Optional[float] = None,
+    target_weight_lbs: float | None = None,
     activity_level: str = "moderate",
 ) -> NutritionTargets:
     """Calculate calorie and macro targets based on body composition goals.

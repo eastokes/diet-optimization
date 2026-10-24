@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 
@@ -162,9 +161,7 @@ class PriceLoader:
         return len(df)
 
 
-def load_prices_from_csv(
-    csv_path: Path, conn: sqlite3.Connection
-) -> dict[str, int]:
+def load_prices_from_csv(csv_path: Path, conn: sqlite3.Connection) -> dict[str, int]:
     """Convenience function to load prices from CSV.
 
     Args:

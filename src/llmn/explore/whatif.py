@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from sqlite3 import Connection
-from typing import Any, Optional
+from typing import Any
 
 from llmn.data.nutrient_ids import get_nutrient_id
 from llmn.db.queries import OptimizationRunQueries
@@ -14,7 +13,7 @@ from llmn.optimizer.models import NutrientConstraint, OptimizationRequest
 from llmn.optimizer.solver import solve_diet_problem
 
 
-def get_run_request(conn: Connection, run_id: int) -> Optional[dict[str, Any]]:
+def get_run_request(conn: Connection, run_id: int) -> dict[str, Any] | None:
     """Get the constraints used in a previous optimization run.
 
     Args:
@@ -39,7 +38,7 @@ def get_run_request(conn: Connection, run_id: int) -> Optional[dict[str, Any]]:
 
 def parse_constraint_modifier(
     modifier: str,
-) -> tuple[str, str, Optional[float]]:
+) -> tuple[str, str, float | None]:
     """Parse a constraint modifier string like 'protein:min:150'.
 
     Args:
@@ -72,9 +71,9 @@ def parse_constraint_modifier(
 
 def apply_constraint_modifiers(
     request: OptimizationRequest,
-    add_constraints: Optional[list[str]] = None,
-    remove_nutrients: Optional[list[str]] = None,
-    new_calorie_range: Optional[tuple[float, float]] = None,
+    add_constraints: list[str] | None = None,
+    remove_nutrients: list[str] | None = None,
+    new_calorie_range: tuple[float, float] | None = None,
 ) -> OptimizationRequest:
     """Apply modifications to an optimization request.
 
@@ -135,9 +134,7 @@ def apply_constraint_modifiers(
             if action == "remove":
                 # Remove existing constraint for this nutrient
                 modified.nutrient_constraints = [
-                    nc
-                    for nc in modified.nutrient_constraints
-                    if nc.nutrient_id != nutrient_id
+                    nc for nc in modified.nutrient_constraints if nc.nutrient_id != nutrient_id
                 ]
             else:
                 # Find existing constraint or create new one
@@ -166,10 +163,10 @@ def apply_constraint_modifiers(
 def run_whatif_analysis(
     conn: Connection,
     base_run_id: int,
-    add_constraints: Optional[list[str]] = None,
-    remove_constraints: Optional[list[str]] = None,
-    new_calorie_range: Optional[tuple[float, float]] = None,
-    remove_foods: Optional[list[int]] = None,
+    add_constraints: list[str] | None = None,
+    remove_constraints: list[str] | None = None,
+    new_calorie_range: tuple[float, float] | None = None,
+    remove_foods: list[int] | None = None,
     verbose: bool = False,
 ) -> dict[str, Any]:
     """Run what-if analysis by modifying constraints from a baseline run.
@@ -222,9 +219,7 @@ def run_whatif_analysis(
     # Add food exclusions
     if remove_foods:
         for fdc_id in remove_foods:
-            modified_request.food_constraints.append(
-                FoodConstraint(fdc_id=fdc_id, max_grams=0)
-            )
+            modified_request.food_constraints.append(FoodConstraint(fdc_id=fdc_id, max_grams=0))
 
     # Run optimization with modified constraints
     result = solve_diet_problem(modified_request, conn, verbose=verbose)
@@ -273,8 +268,7 @@ def run_whatif_analysis(
 
         # Compare to baseline
         baseline_foods = {
-            f["fdc_id"]: f["grams"]
-            for f in result_data.get("solution", {}).get("foods", [])
+            f["fdc_id"]: f["grams"] for f in result_data.get("solution", {}).get("foods", [])
         }
         new_foods = {f.fdc_id: f.grams for f in result.foods}
 
@@ -283,8 +277,7 @@ def run_whatif_analysis(
         changed = [
             fdc_id
             for fdc_id in new_foods
-            if fdc_id in baseline_foods
-            and abs(new_foods[fdc_id] - baseline_foods[fdc_id]) > 1
+            if fdc_id in baseline_foods and abs(new_foods[fdc_id] - baseline_foods[fdc_id]) > 1
         ]
 
         response["comparison"] = {
@@ -296,9 +289,7 @@ def run_whatif_analysis(
         # Cost comparison
         baseline_cost = result_data.get("solution", {}).get("total_cost")
         if baseline_cost and result.total_cost:
-            response["comparison"]["cost_change"] = round(
-                result.total_cost - baseline_cost, 2
-            )
+            response["comparison"]["cost_change"] = round(result.total_cost - baseline_cost, 2)
 
     return response
 
@@ -343,9 +334,7 @@ def preview_constraint_impact(
     # Apply modification
     nutrient, action, value = parse_constraint_modifier(constraint)
 
-    modified_request = apply_constraint_modifiers(
-        base_request, add_constraints=[constraint]
-    )
+    modified_request = apply_constraint_modifiers(base_request, add_constraints=[constraint])
 
     # Build constraints to see food pool impact
     builder = ConstraintBuilder(conn, modified_request)

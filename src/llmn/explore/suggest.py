@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from sqlite3 import Connection
-from typing import Any, Optional
+from typing import Any
 
 from llmn.data.food_categories import FoodCategory, classify_foods_in_db
 
@@ -35,7 +35,7 @@ def suggest_balanced_pool(
     conn: Connection,
     target_size: int = 30,
     require_price: bool = False,
-    tag: Optional[str] = None,
+    tag: str | None = None,
 ) -> PoolSuggestion:
     """Suggest a balanced pool with foods from each macro category.
 
@@ -80,11 +80,16 @@ def suggest_balanced_pool(
         SELECT
             f.fdc_id,
             f.description,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1003) as protein,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1005) as carbs,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1004) as fat,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1079) as fiber,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as energy
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1003) as protein,
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1005) as carbs,
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1004) as fat,
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1079) as fiber,
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as energy
         FROM foods f
         LEFT JOIN prices p ON f.fdc_id = p.fdc_id
         {tag_join}
@@ -146,7 +151,7 @@ def suggest_high_protein_pool(
     conn: Connection,
     target_size: int = 30,
     min_protein_per_100g: float = 20.0,
-    tag: Optional[str] = None,
+    tag: str | None = None,
 ) -> PoolSuggestion:
     """Suggest a pool optimized for high protein content.
 
@@ -175,7 +180,8 @@ def suggest_high_protein_pool(
             f.fdc_id,
             f.description,
             fn.amount as protein_per_100g,
-            (SELECT amount FROM food_nutrients WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as energy
+            (SELECT amount FROM food_nutrients
+             WHERE fdc_id = f.fdc_id AND nutrient_id = 1008) as energy
         FROM foods f
         JOIN food_nutrients fn ON f.fdc_id = fn.fdc_id
         {tag_join}
@@ -222,7 +228,7 @@ def suggest_budget_pool(
     conn: Connection,
     target_size: int = 30,
     max_price_per_100g: float = 1.0,
-    tag: Optional[str] = None,
+    tag: str | None = None,
 ) -> PoolSuggestion:
     """Suggest a pool of budget-friendly foods.
 
@@ -288,7 +294,6 @@ def suggest_budget_pool(
     # Round-robin selection from categories
     selected: list[int] = []
     category_lists = list(by_category.values())
-    idx = 0
     while len(selected) < target_size and category_lists:
         for cat_list in category_lists[:]:
             if cat_list and len(selected) < target_size:
@@ -307,9 +312,9 @@ def suggest_budget_pool(
 
 def suggest_pools(
     conn: Connection,
-    strategies: Optional[list[str]] = None,
+    strategies: list[str] | None = None,
     target_size: int = 30,
-    tag: Optional[str] = None,
+    tag: str | None = None,
     require_price: bool = False,
 ) -> list[PoolSuggestion]:
     """Generate multiple pool suggestions using different strategies.

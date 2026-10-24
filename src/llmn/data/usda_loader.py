@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import pandas as pd
 
@@ -42,7 +42,7 @@ class USDALoader:
     def load_all(
         self,
         data_types: list[str],
-        progress_callback: Optional[Callable[[str], None]] = None,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> dict[str, int]:
         """Load all USDA data into the database.
 
@@ -241,9 +241,7 @@ class USDALoader:
 
             # USDA often leaves portion_description empty and puts the measure
             # in modifier/amount (for example amount=3, modifier="oz").
-            if (pd.isna(portion_desc) or not str(portion_desc).strip()) and pd.notna(
-                modifier
-            ):
+            if (pd.isna(portion_desc) or not str(portion_desc).strip()) and pd.notna(modifier):
                 modifier_text = str(modifier).strip()
                 if pd.notna(amount):
                     amount_text = f"{float(amount):g}"
@@ -287,8 +285,8 @@ class USDALoader:
 def load_usda_data(
     usda_path: Path,
     conn: sqlite3.Connection,
-    data_types: Optional[list[str]] = None,
-    progress_callback: Optional[Callable[[str], None]] = None,
+    data_types: list[str] | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, int]:
     """Convenience function to load USDA data.
 

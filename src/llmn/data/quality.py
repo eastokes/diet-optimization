@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from typing import Optional
-
 
 # USDA nutrient IDs for critical macros
 ENERGY_ID = 1008
@@ -27,12 +25,10 @@ class DataQualityIssue:
     issue_type: str  # "missing_energy", "zero_macros", "calculated_energy"
     severity: str  # "warning", "error"
     message: str
-    fallback_value: Optional[float] = None
+    fallback_value: float | None = None
 
 
-def calculate_fallback_energy(
-    protein_g: float, carbs_g: float, fat_g: float
-) -> float:
+def calculate_fallback_energy(protein_g: float, carbs_g: float, fat_g: float) -> float:
     """Calculate calories from macronutrients using Atwater factors.
 
     Uses the standard Atwater factors:
@@ -150,7 +146,10 @@ def detect_incomplete_foods(
                         description=description,
                         issue_type="inconsistent_energy",
                         severity="warning",
-                        message=f"Stored energy ({energy:.0f}) differs from calculated ({calculated:.0f})",
+                        message=(
+                            f"Stored energy ({energy:.0f}) differs from "
+                            f"calculated ({calculated:.0f})"
+                        ),
                         fallback_value=None,
                     )
                 )
@@ -170,17 +169,11 @@ def format_quality_warnings(issues: list[DataQualityIssue]) -> list[str]:
     warnings = []
     for issue in issues:
         if issue.issue_type == "missing_energy":
-            warnings.append(
-                f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}"
-            )
+            warnings.append(f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}")
         elif issue.issue_type == "zero_macros":
-            warnings.append(
-                f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}"
-            )
+            warnings.append(f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}")
         elif issue.issue_type == "inconsistent_energy":
-            warnings.append(
-                f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}"
-            )
+            warnings.append(f"{issue.description} (fdc_id={issue.fdc_id}): {issue.message}")
     return warnings
 
 
